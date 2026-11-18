@@ -312,6 +312,7 @@ function App() {
   // Always use the active style + optional hanging loop for exact reference
   // dimensions, even while the worker is rebuilding the geometry.
   const style = getStyle(config.styleId);
+  const avatarDiameter = 2 * style.layout.avatar.radius * (config.planarScale ?? 100) / 100;
   const referenceSize = referenceDimensions(style, config.hangingLoop !== false);
   const physicalSize =
     !busy && valid && design?.size
@@ -460,7 +461,7 @@ function App() {
                   statusIsHidden(config) ? "Hide" : config.statusMode === "preset" ? config.status : "Custom"
                 }
                 onChange={(e) =>
-                  e.target.value === "Hide" ? patch({hideStatus:true,dotColor:"auto",filamentColors:config.filamentColors?.map((v,i)=>i===3?"auto":v)}) : e.target.value === "Custom"
+                  e.target.value === "Hide" ? patch({hideStatus:true}) : e.target.value === "Custom"
                     ? patch({ statusMode: "custom", hideStatus:false,dotColor:"auto",filamentColors:config.filamentColors?.map((v,i)=>i===3?"auto":v) })
                     : patch({
                         hideStatus: false,
@@ -517,7 +518,7 @@ function App() {
                   >
                     {t("选择本地图片")} ↗
                   </button>
-                  <small>{t(avatarName)}</small>
+                  <small>{avatar ? avatarName : t("未上传头像")}</small>
                 </div>
                 {(avatar || avatarError) && (
                   <button
@@ -551,6 +552,20 @@ function App() {
                   {t(avatarError)}
                 </p>
               )}
+              <p className="avatar-size" aria-live="polite">
+                {t("照片区域直径")} <strong>{mm(avatarDiameter)} mm</strong>
+              </p>
+              <p className="field-note">
+                {t("头像用于预览和 GLB 贴图；3MF 不包含照片。")}
+              </p>
+              <details className="avatar-print-notes">
+                <summary>{t("纸张打印与裁剪说明")}</summary>
+                <p>{t(style.id === "classic"
+                  ? "按显示直径裁圆后粘贴；头像面与白框齐平，没有插纸卡槽。"
+                  : "显示的是完整圆的直径；右下角需剪出状态点缺口，再粘贴到头像面。")}</p>
+                <p>{t("先在排版软件将照片设为显示的毫米直径。图片居中裁剪；按实际尺寸 / 100% 打印，关闭适应页面；切片器再次缩放模型时，纸片也要同比缩放。")}</p>
+                <p>{t("尺寸为模型名义值，纸厚、胶厚和裁剪余量仍需实物试贴确认。")}</p>
+              </details>
             </section>
           </aside>
           <section className="preview-panel">

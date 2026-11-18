@@ -23,6 +23,8 @@ export function Preview({
   const height = design?.size?.[1] ?? 38;
   const sizeRef = useRef([width, height]);
   sizeRef.current = [width, height];
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -69,7 +71,7 @@ export function Preview({
         (Math.max(sizeRef.current[1], sizeRef.current[0] / camera.aspect) /
           (2 * Math.tan(THREE.MathUtils.degToRad(17.5)))) *
         1.18;
-      camera.position.set(0, -fit * 0.14, fit);
+      camera.position.set(0, viewRef.current % 2 ? 0 : -fit * 0.14, fit);
       controls.minDistance = fit * 0.5;
       controls.maxDistance = fit * 3;
       camera.updateProjectionMatrix();

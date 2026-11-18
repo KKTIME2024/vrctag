@@ -23,20 +23,23 @@ export function SizeNumberInput({
   const [draft, setDraft] = useState(() => display(value, unit));
   const [editing, setEditing] = useState(false);
   const canceled = useRef(false);
+  const dirty = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(display(value, unit));
   }, [value, unit, editing]);
 
   const commit = () => {
-    if (canceled.current) {
+    if (canceled.current || !dirty.current) {
       canceled.current = false;
+      dirty.current = false;
       setEditing(false);
       setDraft(display(value, unit));
       return;
     }
     const trimmed = draft.trim();
     const parsed = Number(trimmed.replace(",", "."));
+    dirty.current = false;
     if (trimmed && Number.isFinite(parsed)) {
       const bounded = Math.max(min, Math.min(max, parsed));
       if (Math.abs(bounded - value) > 0.0000001) onCommit(bounded);
@@ -56,8 +59,12 @@ export function SizeNumberInput({
         max={max}
         value={draft}
         aria-label={label}
-        onChange={(event) => setDraft(event.currentTarget.value)}
+        onChange={(event) => {
+          dirty.current = true;
+          setDraft(event.currentTarget.value);
+        }}
         onFocus={(event) => {
+          dirty.current = false;
           setEditing(true);
           event.currentTarget.select();
         }}
