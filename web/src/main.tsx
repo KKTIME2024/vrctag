@@ -16,6 +16,7 @@ import { scaledDimensions, referenceDimensions, clampScale, percentFromMillimete
 import { SizeNumberInput } from "./SizeNumberInput";
 import { takeStarPromptOpportunity } from "./star-prompt";
 import { Preview } from "./Preview";
+import { avatarDiameter, avatarPrintPdf, type Paper } from "./avatar-print";
 import {
   defaults,
   statuses,
@@ -44,11 +45,30 @@ function App() {
   }));
   const [design, setDesign] = useState<Design | null>(null);
   const [avatar, setAvatar] = useState("");
+  const [avatarSource, setAvatarSource] = useState("");
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropX, setCropX] = useState(50);
+  const [cropY, setCropY] = useState(50);
+  useEffect(() => {
+    if (!avatarSource) return;
+    let active = true;
+    const image = new Image();
+    image.onload = () => {
+      if (!active) return;
+      const size = Math.min(image.width, image.height) / cropZoom;
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = 512;
+      canvas.getContext("2d")!.drawImage(image, (image.width - size) * cropX / 100, (image.height - size) * cropY / 100, size, size, 0, 0, 512, 512);
+      setAvatar(canvas.toDataURL("image/png"));
+    };
+    image.src = avatarSource;
+    return () => { active = false; };
+  }, [avatarSource, cropZoom, cropX, cropY]);
   const [pronounMode, setPronounMode] = useState("None");
   const [busy, setBusy] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [modelError, setModelError] = useState("");
   const [avatarError, setAvatarError] = useState("");
+  const [avatarDragging, setAvatarDragging] = useState(false);
   const [configError, setConfigError] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
   const configImportGeneration = useRef(0);
@@ -69,6 +89,9 @@ function App() {
   const upload = useRef<HTMLInputElement>(null);
   const [exportFormat,setExportFormat]=useState<"bambu"|"core"|"blender">("bambu");
   const blenderExportBusy = useRef(false);
+  const [paper, setPaper] = useState<Paper>("A4");
+  const [printError, setPrintError] = useState("");
+  const [printing, setPrinting] = useState(false);
   const [avatarName, setAvatarName] = useState("未上传头像");
   const language = config.language ?? "zh";
   const t = (text: string) => translate(language, text);
@@ -228,24 +251,13 @@ function App() {
         setAvatarError("图片像素过大，请缩小至 4000 万像素以内。");
         return;
       }
-      const size = Math.min(bitmap.width, bitmap.height);
       const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = 512;
-      canvas
-        .getContext("2d")!
-        .drawImage(
-          bitmap,
-          (bitmap.width - size) / 2,
-          (bitmap.height - size) / 2,
-          size,
-          size,
-          0,
-          0,
-          512,
-          512,
-        );
+      const ratio = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.round(bitmap.width * ratio); canvas.height = Math.round(bitmap.height * ratio);
+      canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
-      setAvatar(canvas.toDataURL("image/png"));
+      setCropZoom(1); setCropX(50); setCropY(50);
+      setAvatarSource(canvas.toDataURL("image/png"));
       setAvatarName(file.name);
       setAvatarError("");
     } catch {
@@ -255,6 +267,22 @@ function App() {
       bitmap?.close();
     }
   }
+  useEffect(() => {
+    const paste = (event: ClipboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      const item = Array.from(event.clipboardData?.items ?? []).find(item => item.kind === "file" && item.type.startsWith("image/"));
+      const file = item?.getAsFile();
+      if (file) { event.preventDefault(); void loadAvatar(file); }
+    };
+    const preventFileNavigation = (event: DragEvent) => {
+      if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("paste", paste);
+    window.addEventListener("dragover", preventFileNavigation);
+    window.addEventListener("drop", preventFileNavigation);
+    return () => { window.removeEventListener("paste", paste); window.removeEventListener("dragover", preventFileNavigation); window.removeEventListener("drop", preventFileNavigation); };
+  }, []);
   async function restoreConfig(file?: File) {
     if (!file) return;
     const generation = ++configImportGeneration.current;
@@ -296,6 +324,7 @@ function App() {
     setConfig({ ...defaults, language, statusMode: "preset" });
     setPronounMode("None");
     setAvatar("");
+    setAvatarSource("");
     setAvatarName("未上传头像");
     setNotice("");
     setAvatarError("");
@@ -502,6 +531,11 @@ function App() {
               <div className="section-heading">
                 <span>{t("头像")}</span>
               </div>
+              <div className={`avatar-dropzone${avatarDragging ? " is-dragging" : ""}`}
+                onDragEnter={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); setAvatarDragging(true); } }}
+                onDragOver={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setAvatarDragging(false); }}
+                onDrop={e => { e.preventDefault(); setAvatarDragging(false); const file = e.dataTransfer.files[0]; if (file) void loadAvatar(file); }}>
               <div className="upload-row">
                 <button type="button" className="avatar-thumb" aria-label={t("选择本地图片")} onClick={() => upload.current?.click()}>
                   {avatar ? (
@@ -527,6 +561,7 @@ function App() {
                       avatarGeneration.current++;
                       setAvatarError("");
                       setAvatar("");
+                      setAvatarSource("");
                       setAvatarName("未上传头像");
                       if (upload.current) upload.current.value = "";
                     }}
@@ -534,6 +569,8 @@ function App() {
                     ×
                   </button>
                 )}
+              </div>
+              <p className="avatar-drop-hint">{t("拖入图片，或按 Ctrl + V 粘贴")}</p>
               </div>
               <input
                 ref={upload}
@@ -546,6 +583,13 @@ function App() {
                   void loadAvatar(file);
                 }}
               />
+              {avatarSource && <div className="crop-controls">
+                <div className="crop-heading"><span>{t("调整圆形头像裁切")}</span><button type="button" className="crop-reset" onClick={() => { setCropZoom(1); setCropX(50); setCropY(50); }}>{t("重置裁切")}</button></div>
+                {avatar && <img className="crop-preview" src={avatar} alt={t("裁切预览")} />}
+                <label>{t("缩放")} {cropZoom.toFixed(1)}× <input type="range" min="1" max="3" step="0.05" value={cropZoom} onChange={e => setCropZoom(Number(e.target.value))} /></label>
+                <label>{t("左右位置")} <input type="range" min="0" max="100" value={cropX} onChange={e => setCropX(Number(e.target.value))} /></label>
+                <label>{t("上下位置")} <input type="range" min="0" max="100" value={cropY} onChange={e => setCropY(Number(e.target.value))} /></label>
+              </div>}
               {avatarError && (
                 <p role="alert" className="error">
                   {t(avatarError)}
@@ -715,6 +759,22 @@ function App() {
                 <span>{t(exporting ? "正在本地打包…" : exportFormat === "blender" ? "下载 Blender GLB" : exportFormat === "bambu" ? "下载多色 3MF" : "下载通用 3MF")}</span>
                 <span>↓</span>
               </button>
+              <div className="avatar-print-panel">
+                <div className="avatar-print-heading"><strong>{t("头像打印页")}</strong><span>{t("圆形头像直径")} <b>{avatarDiameter(config).toFixed(2)} mm</b></span></div>
+                <p className="field-note">{t("头像直径随名牌长宽缩放，按裁切结果排满纸张")}</p>
+                <label htmlFor="avatar-paper">{t("纸张规格")}</label>{" "}
+                <select id="avatar-paper" value={paper} onChange={e => setPaper(e.target.value as Paper)}>
+                  <option value="A4">A4 (210 × 297 mm)</option><option value="A5">A5 (148 × 210 mm)</option><option value="A6">A6 (105 × 148 mm)</option><option value="B5JIS">B5 JIS (182 × 257 mm)</option><option value="B5ISO">B5 ISO (176 × 250 mm)</option><option value="Letter">Letter (8.5 × 11 in)</option><option value="Photo4x6">照片纸 4 × 6 in (101.6 × 152.4 mm)</option><option value="Photo5x7">照片纸 5 × 7 in (127 × 177.8 mm)</option><option value="Photo3R">照片纸 3R (89 × 127 mm)</option>
+                </select>
+                <button className="avatar-print-button" type="button" disabled={!avatar || printing} onClick={async () => {
+                  setPrinting(true); setPrintError("");
+                  try { const pdf = await avatarPrintPdf(avatar, config, paper); download(pdf.slice().buffer, `avatar-${paper}-${avatarDiameter(config).toFixed(2)}mm.pdf`, "application/pdf"); }
+                  catch { setPrintError("头像打印页生成失败，请重试。"); } finally { setPrinting(false); }
+                }}><span>{t(printing ? "正在生成…" : "下载头像打印 PDF")}</span><span aria-hidden="true">↓</span></button>
+                <p className="field-note">{t("请先上传头像；打印时选实际大小 / 100%，不要选适应页面。建议先量一张确认尺寸。")}</p>
+                {getStyle(config.styleId).id === "native" && <p className="field-note">{t("Native 头像旁有状态点缺口，圆形纸片可能需要手工修剪。")}</p>}
+                {printError && <p className="error" role="alert">{t(printError)}</p>}
+              </div>
               <div className="export-links">
 
 

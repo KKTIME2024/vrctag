@@ -993,3 +993,44 @@ footer a {
 .size-scaling-label>.size-numeric{flex:none}
 .size-scaling-hint+.size-scaling-hint{margin-top:6px}
 @media(max-width:420px){.size-scaling-unit{font-size:10px}.size-numeric input[type="number"]{width:88px;padding-left:7px}.size-measure{gap:7px}.size-scaling-millimeters{gap:10px}}
+
+
+/* Avatar tools share the same palette and controls as the rest of the studio. */
+.crop-controls { margin-top: 20px; padding-top: 17px; border-top: 1px solid #2a3734; }
+.crop-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #d0ddce; font-size: 12px; }
+.crop-reset { padding: 0; border: 0; background: transparent; color: #a1b897; font-size: 10px; }
+.crop-reset:hover { color: #d8eac0; }
+.crop-preview { display: block; width: 104px; height: 104px; object-fit: cover; border-radius: 50%; border: 2px solid #c6dca7; margin: 16px auto; }
+.control-section .crop-controls label { margin: 12px 0 0; color: #b9cbbd; font-size: 11px; }
+.crop-controls input[type="range"] { appearance: auto; -webkit-appearance: auto; display: block; width: 100%; height: 24px; margin: 5px 0 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: #c9e2a7; cursor: pointer; }
+.crop-controls input[type="range"]:focus-visible { outline: 2px solid #c9e2a7; outline-offset: 2px; }
+.avatar-print-panel { margin-top: 24px; padding: 20px; border: 1px solid #405342; border-radius: 8px; background: #182523; }
+.avatar-print-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.avatar-print-heading strong { color: #d8e7d6; font-size: 14px; font-weight: 600; }
+.avatar-print-heading span { color: #8da89a; font-size: 11px; }
+.avatar-print-heading b { color: #c9e2a7; font: 600 14px ui-monospace, monospace; }
+.avatar-print-panel label { display: block; margin: 18px 0 8px; color: #b9cbbd; font-size: 11px; }
+.avatar-print-panel select { margin: 0; }
+.avatar-print-button { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 14px; padding: 13px 16px; border: 1px solid #718d70; border-radius: 8px; background: #283d32; color: #d9e9d1; font-size: 12px; font-weight: 600; transition: background .2s; }
+.avatar-print-button:hover:enabled { background: #354e3e; }
+.avatar-print-button:disabled { opacity: .45; cursor: not-allowed; }
+.avatar-print-button span:last-child { font-size: 19px; line-height: 12px; }
+.avatar-print-panel .field-note { margin-top: 10px; }
+@media(max-width:600px) { .avatar-print-panel { padding: 16px; } }
+
+.avatar-dropzone { padding: 12px; margin: -12px; border: 1px dashed transparent; border-radius: 8px; transition: border-color .2s, background .2s; }
+.avatar-dropzone.is-dragging { border-color: #c6dca7; background: #263b30; }
+.avatar-drop-hint { margin: 10px 0 0; color: #7c9588; font-size: 10px; line-height: 1.5; }
+
+/* Native select semantics with a picker that matches the studio menu. */
+@supports (appearance: base-select) {
+  select, select::picker(select) { appearance: base-select; }
+  select { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  select::picker-icon { color: #9bb589; transition: rotate .2s; }
+  select:open::picker-icon { rotate: 180deg; }
+  select::picker(select) { margin-top: 5px; padding: 5px; border: 1px solid #3c4c43; border-radius: 9px; background: #17231e; box-shadow: 0 12px 32px #0008; color: #d4dbd5; }
+  select option { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 9px 11px; border-radius: 6px; background: transparent; color: #d4dbd5; font-size: 12px; cursor: pointer; }
+  select option:hover, select option:focus { background: #293b30; }
+  select option:checked { background: #c9e2a718; color: #d4eab8; }
+  select option::checkmark { margin-left: auto; order: 1; color: #c9e2a7; }
+}
