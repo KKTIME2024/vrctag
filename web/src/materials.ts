@@ -2,7 +2,7 @@
 // Copyright (c) 2026 RICHARDwuxiaofei
 import { getStyle } from "./styles";
 import type { Config, Part } from "./model";
-import { resolvedDot } from "./model";
+import { resolvedDot } from "./status-colors";
 export function defaultFilamentColors(c: Config): string[] {
   const style = getStyle(c.styleId);
   const profile = "printing" in style ? style.printing : undefined;
