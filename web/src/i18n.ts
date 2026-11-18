@@ -46,6 +46,33 @@ export const statusLabels: Record<Language, Record<string, string>> = {
 // Busy is the legacy API identifier for red Do Not Disturb; orange Ask Me is Chinese 忙碌.
 // Japanese wording is retained pending a current primary-source/client verification.
 const rows: Record<string, [string, string, string]> = {
+  "照片区域直径": ["写真領域の直径", "사진 영역 지름", "Photo area diameter"],
+  "头像用于预览和 GLB 贴图；3MF 不包含照片。": [
+    "画像はプレビューとGLBのテクスチャに使われます。3MFには写真は含まれません。",
+    "이미지는 미리보기와 GLB 텍스처에 사용됩니다. 3MF에는 사진이 포함되지 않습니다.",
+    "The image appears in the preview and GLB texture; 3MF does not include the photo.",
+  ],
+  "纸张打印与裁剪说明": ["写真の印刷と切り抜き", "사진 인쇄 및 자르기 안내", "Photo printing and cutting guide"],
+  "按显示直径裁圆后粘贴；头像面与白框齐平，没有插纸卡槽。": [
+    "表示された直径の円に切って貼り付けます。写真面と白い縁は同じ高さで、紙を差し込む溝はありません。",
+    "표시된 지름으로 원형으로 잘라 붙이세요. 사진 면과 흰색 테두리는 같은 높이이며 종이를 끼우는 홈은 없습니다.",
+    "Cut a circle at the displayed diameter and glue it on. The photo surface is flush with the white rim; there is no paper slot.",
+  ],
+  "显示的是完整圆的直径；右下角需剪出状态点缺口，再粘贴到头像面。": [
+    "表示値は円全体の直径です。右下にステータス点を避ける切り欠きを入れてから、写真面に貼り付けてください。",
+    "표시값은 전체 원의 지름입니다. 오른쪽 아래 상태 점 부분을 오려낸 뒤 사진 면에 붙이세요.",
+    "The diameter describes the full circle. Cut a notch at the lower right for the status dot, then glue the photo onto the surface.",
+  ],
+  "先在排版软件将照片设为显示的毫米直径。图片居中裁剪；按实际尺寸 / 100% 打印，关闭适应页面；切片器再次缩放模型时，纸片也要同比缩放。": [
+    "まずレイアウトソフトで写真を表示されたmm単位の直径に設定してください。画像は中央で切り抜かれます。実寸・100%で印刷し、ページに合わせる設定を無効にしてください。スライサーで再度拡縮する場合は、写真にも同じ倍率を適用してください。",
+    "먼저 편집 프로그램에서 사진 지름을 표시된 mm 치수로 설정하세요. 이미지는 중앙 기준으로 잘립니다. 실제 크기 / 100%로 인쇄하고 페이지 맞춤을 끄세요. 슬라이서에서 모델을 다시 확대·축소하면 사진에도 같은 비율을 적용하세요.",
+    "First set the photo to the displayed diameter in millimeters in your layout app. Images are center-cropped. Print at actual size / 100% with fit-to-page off. If you rescale the model in a slicer, scale the photo by the same amount.",
+  ],
+  "尺寸为模型名义值，纸厚、胶厚和裁剪余量仍需实物试贴确认。": [
+    "寸法はモデルの公称値です。紙と接着剤の厚さ、切り抜きの余裕は実物で確認してください。",
+    "치수는 모델의 설계값입니다. 종이와 접착제 두께, 자르기 여유는 실제 부품에 붙여 확인하세요.",
+    "These are nominal model dimensions. Paper and adhesive thickness and cutting clearance still need a physical fit check.",
+  ],
   "厚度缩小会同时降低文字和状态灯浮雕；50% 时为 0.3 mm，请按实际层高检查切片。缩放不保证可打印。": ["厚さを縮小すると文字とステータス点の高さも低下します。50%では0.3 mmです。レイヤー高さを確認してください。印刷を保証するものではありません。", "두께를 줄이면 글자와 상태 점의 돌출도 낮아집니다. 50%에서는 0.3 mm입니다. 레이어 높이를 확인하세요. 출력 가능성을 보장하지 않습니다.", "Reducing thickness also lowers text and status relief: 0.3 mm at 50%. Check your layer height and slicing. Scaling does not guarantee printability."],
   "Blender（GLB，含颜色与头像）": ["Blender（GLB・色と画像を含む）", "Blender (GLB, 색상과 이미지 포함)", "Blender (GLB, colors & avatar)"],
   "下载 Blender GLB": ["Blender GLBを保存", "Blender GLB 다운로드", "Download Blender GLB"],

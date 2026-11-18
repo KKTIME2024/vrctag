@@ -346,6 +346,28 @@ select + input {
   line-height: 1.9;
   margin: 9px 0 0;
 }
+.avatar-size {
+  margin: 15px 0 0;
+  color: #aabeb0;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.avatar-size strong {
+  color: #d1dfc9;
+  font-variant-numeric: tabular-nums;
+}
+.avatar-print-notes {
+  margin-top: 10px;
+  color: #9cb1a3;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.avatar-print-notes summary {
+  cursor: pointer;
+}
+.avatar-print-notes p {
+  margin: 8px 0 0;
+}
 .upload-row {
   display: flex;
   gap: 13px;
