@@ -46,6 +46,10 @@ export const statusLabels: Record<Language, Record<string, string>> = {
 // Busy is the legacy API identifier for red Do Not Disturb; orange Ask Me is Chinese 忙碌.
 // Japanese wording is retained pending a current primary-source/client verification.
 const rows: Record<string, [string, string, string]> = {
+  "6寸相纸（4R）": ["6インチ写真用紙（4R）","6인치 인화지 (4R)","6-inch photo paper (4R)"],
+  "6寸相纸（100×150）": ["6インチ写真用紙（100×150）","6인치 인화지 (100×150)","6-inch photo paper (100×150)"],
+  "5寸相纸（3R）": ["5インチ写真用紙（3R）","5인치 인화지 (3R)","5-inch photo paper (3R)"],
+  "7寸相纸（5R）": ["7インチ写真用紙（5R）","7인치 인화지 (5R)","7-inch photo paper (5R)"],
   "照片打印纸张": ["写真用紙のサイズ","사진 인화지 크기","Photo print paper"],
   "PDF 页面实际尺寸": ["PDF の用紙実寸","PDF 용지 실제 크기","PDF page dimensions"],
   "头像裁剪直径": ["写真の切り抜き直径","사진 재단 지름","Photo cut diameter"],
