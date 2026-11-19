@@ -601,7 +601,7 @@ function App() {
                 <select id="photo-paper" value={photoPaperId} onChange={(event) => setPhotoPaperId(event.target.value as PhotoPaperId)}>
                   {PHOTO_PAPERS.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.label} — {item.widthMm} × {item.heightMm} mm
+                      {t(item.label)} — {item.widthMm} × {item.heightMm} mm
                     </option>
                   ))}
                 </select>

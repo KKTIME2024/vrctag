@@ -10,10 +10,10 @@ export interface PhotoPaper {
   label: string;
 }
 export const PHOTO_PAPERS: readonly PhotoPaper[] = [
-  { id: "4r", widthMm: 101.6, heightMm: 152.4, label: "4R / 4 x 6 in" },
-  { id: "4r100", widthMm: 100, heightMm: 150, label: "6 in / 100 x 150 mm" },
-  { id: "3r", widthMm: 88.9, heightMm: 127, label: "3R / 3.5 x 5 in" },
-  { id: "5r", widthMm: 127, heightMm: 177.8, label: "5R / 5 x 7 in" },
+  { id: "4r", widthMm: 101.6, heightMm: 152.4, label: "6寸相纸（4R）" },
+  { id: "4r100", widthMm: 100, heightMm: 150, label: "6寸相纸（100×150）" },
+  { id: "3r", widthMm: 88.9, heightMm: 127, label: "5寸相纸（3R）" },
+  { id: "5r", widthMm: 127, heightMm: 177.8, label: "7寸相纸（5R）" },
   { id: "a4", widthMm: 210, heightMm: 297, label: "A4" },
 ];
 
