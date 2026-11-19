@@ -16,7 +16,7 @@ import { scaledDimensions, referenceDimensions, clampScale, percentFromMillimete
 import { SizeNumberInput } from "./SizeNumberInput";
 import { takeStarPromptOpportunity } from "./star-prompt";
 import { Preview } from "./Preview";
-import { PHOTO_PAPERS, generatePhotoPdf, type PhotoPaperId } from "./photo-pdf";
+import { PHOTO_PAPERS, generatePhotoPdf, planPhotoPdf, type PhotoPaperId, type PhotoPrintMode } from "./photo-pdf";
 import {
   defaults,
   statuses,
@@ -48,6 +48,7 @@ function App() {
   const printAvatarFile = useRef<File | null>(null);
   const [avatarSourceSize, setAvatarSourceSize] = useState(0);
   const [photoPaperId, setPhotoPaperId] = useState<PhotoPaperId>("4r");
+  const [photoPrintMode, setPhotoPrintMode] = useState<PhotoPrintMode>("multiple");
   const [photoPdfBusy, setPhotoPdfBusy] = useState(false);
   const [photoPdfError, setPhotoPdfError] = useState("");
   const [pronounMode, setPronounMode] = useState("None");
@@ -332,6 +333,13 @@ function App() {
       : scaledDimensions(referenceSize, config);
   const mm = (value: number) => value.toFixed(2);
   const paper = PHOTO_PAPERS.find((entry) => entry.id === photoPaperId)!;
+  const avatarPhotoLayout = {
+    radiusMm: style.layout.avatar.radius,
+    dotOffsetXmm: style.layout.avatar.dotCenter[0] - style.layout.avatar.center[0],
+    dotOffsetYmm: style.layout.avatar.dotCenter[1] - style.layout.avatar.center[1],
+    dotRadiusMm: style.layout.avatar.dotRadius,
+  };
+  const photoPlan = planPhotoPdf(photoPaperId, avatarPhotoLayout, config.planarScale ?? 100, photoPrintMode);
   const photoPpi = avatarSourceSize ? Math.round(Math.min(1200, avatarSourceSize) * 25.4 / avatarDiameter) : 0;
   const downloadPhotoPdf = async () => {
     const file = printAvatarFile.current;
@@ -339,14 +347,8 @@ function App() {
     setPhotoPdfBusy(true);
     setPhotoPdfError("");
     try {
-      const avatarLayout = style.layout.avatar;
-      const pdf = await generatePhotoPdf(file, photoPaperId, style.name, config.planarScale ?? 100, {
-        radiusMm: avatarLayout.radius,
-        dotOffsetXmm: avatarLayout.dotCenter[0] - avatarLayout.center[0],
-        dotOffsetYmm: avatarLayout.dotCenter[1] - avatarLayout.center[1],
-        dotRadiusMm: avatarLayout.dotRadius,
-      });
-      download(pdf, `vrc-tag-photo-${style.id}-${photoPaperId}-${mm(avatarDiameter)}mm.pdf`, "application/pdf");
+      const pdf = await generatePhotoPdf(file, photoPaperId, style.name, config.planarScale ?? 100, avatarPhotoLayout, photoPrintMode);
+      download(pdf, `vrc-tag-photo-${style.id}-${photoPaperId}-${photoPrintMode}-${photoPlan.positions.length}pcs-${mm(avatarDiameter)}mm.pdf`, "application/pdf");
       promptStarAfterExport();
     } catch (error) {
       console.error("Photo PDF export failed", error);
@@ -605,9 +607,26 @@ function App() {
                     </option>
                   ))}
                 </select>
+
+                <div className="photo-print-mode">
+                  <span className="photo-print-mode-label">{t("照片排版方式")}</span>
+                  <div className="photo-print-mode-options" role="group" aria-label={t("照片排版方式")}>
+                    <label className={photoPrintMode === "single" ? "selected" : ""}>
+                      <input type="radio" name="photo-print-mode" value="single" checked={photoPrintMode === "single"}
+                        onChange={() => setPhotoPrintMode("single")} />
+                      <span>{t("单张")}</span>
+                    </label>
+                    <label className={photoPrintMode === "multiple" ? "selected" : ""}>
+                      <input type="radio" name="photo-print-mode" value="multiple" checked={photoPrintMode === "multiple"}
+                        onChange={() => setPhotoPrintMode("multiple")} />
+                      <span>{t("多张（铺满页面）")}</span>
+                    </label>
+                  </div>
+                </div>
                 <p className="photo-pdf-size">
                   {t("PDF 页面实际尺寸")} <strong>{paper.widthMm} × {paper.heightMm} mm</strong>
                   <span>{t("头像裁剪直径")} <strong>{mm(avatarDiameter)} mm</strong></span>
+                  <span>{t("本页照片数量")} <strong>{photoPlan.positions.length} {t("张")}</strong>{photoPrintMode === "multiple" ? ` · ${photoPlan.columns} × ${photoPlan.rows}` : ""}</span>
                 </p>
                 {avatar && <p className="field-note">{t("上传图像的裁剪边长")} {avatarSourceSize} px · {t("估算有效分辨率")} {photoPpi} ppi</p>}
                 <button className="photo-pdf-button" type="button" disabled={!avatar || photoPdfBusy}
@@ -618,8 +637,14 @@ function App() {
                 {photoPdfError && <p role="alert" className="error">{t(photoPdfError)}</p>}
                 <p className="field-note">{t("推荐使用与打印机兼容的亮面或绒面相纸；按包装尺寸选纸，不要把 100×150 mm 与 4R 混为一谈。")}</p>
                 <p className="field-note">{t("可先试用 180–230 g/m² 相纸；克重不是实际厚度。Native 默认头像面比白框低约 0.35 mm，纸加胶可能超过边框。")}</p>
-                <p className="field-note">{t("PDF 已按毫米排版：打印选实际尺寸 100%，关闭适应纸张和无边距自动扩展；先用尺量 PDF 内的 20 mm 校准线。")}</p>
-                <p className="field-note">{t("一页一张照片；Native 的 PDF 已自动避开状态点并附裁切虚线。")}</p>
+                <p className="field-note">{t("PDF 已按毫米排版：打印选实际尺寸 100%，关闭适应纸张和无边距自动扩展。")}</p>
+                <p className="field-note">{t(photoPrintMode === "single"
+                  ? "单张 PDF 包含 20 mm 校准线，可先试印量尺。"
+                  : "多张模式自动紧凑铺满页面，每张实际尺寸不变；最外侧照片可能离纸边仅约 1.5 mm，请确认打印机可印范围。")}</p>
+                {photoPrintMode === "multiple" && <p className="field-note">{t(photoPlan.calibrationYmm === null
+                  ? "密排空间不足，已省略校准线；建议先切换单张试印测量，再下载多张。"
+                  : "本页空白处保留 20 mm 校准线，打印后请测量。")}</p>}
+                <p className="field-note">{t("Native 的 PDF 会自动避开状态点，并为每张照片附加裁剪虚线。")}</p>
               </div>
               <details className="avatar-print-notes">
                 <summary>{t("纸张打印与裁剪说明")}</summary>

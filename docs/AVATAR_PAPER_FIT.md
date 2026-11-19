@@ -46,3 +46,15 @@ The PDF module was exercised independently with a real JPEG source across **5 pa
 **Limits:** no physical paper has been printed or glued in this release. The site's PDF maintains design dimensions, but individual printers, paper coatings, adhesives, and cutting methods remain unverified. 3MF still does not embed the photo (3D-printing colors are separate).
 
 Reference for photo paper sizes: Epson's printer paper support documentation, which lists 4×6 at 102×152mm, 3.5×5 at 89×127mm, 5×7 at 127×178mm, and A4 at 210×297mm. Exact PDF dimensions use the underlying inch-to-mm conversion, not rounded driver labels.
+
+## 单张 / 多张密排 (2026-11-19)
+
+照片 PDF 增加「单张」与「多张（铺满页面）」选项。默认选择多张，与以前一次冲印一排头像的需求一致；切换到单张仍能生成原来的独立校准照片。**两种模式的所有头像都以 72/25.4 pt/mm 计算，绝不会为铺满而拉伸照片。**
+
+- 单张：页面中央放 1 张，保留 20 mm 校准线、头像直径以及 100% 打印提示；沿用此前向下兼容的默认生成 API。
+- 多张：在同一页按矩形网格自动重复当前头像，所有格子共用一个 JPEG PDF 图像资源，不会重复写入 N 份图片。每张保留原始尺寸、Native 状态点缺口和裁剪虚线。
+- 密排基准：最小 **1.5 mm** 页边距、头像之间 **0.5 mm** 间隙。按纸张和直径计算可排的最大完整矩形网格；将整个网格居中。如果边距不足 11 mm，为避免校准线压在照片上，则自动省略校准线，请先用单张版校准。
+- 4R (101.6 × 152.4 mm)、XY 100%：Classic **2列×3行 = 6张**，各直径47.6 mm；Native **3列×4行 = 12张**，各直径32 mm。100×150mm 的 6 寸纸，默认也分别为 6、12 张。其他纸张及50–150%比例自动重新计算，网页实时显示预计张数。
+- **注意**：紧凑模式的最外侧头像可能距离纸边只有1.5mm。不能保证所有冲印机的不可打印边距都小于这一数值。印刷必须使用真实尺寸100%，关闭填充/适应页面/无边距自动扩展；先用普通纸验证最外侧是否被裁掉。如被裁掉，改用更大纸张或单张模式。
+
+多张是「相同头像重复排版」，不是选择多张不同头像拼图；源图仍只在浏览器本地处理。
