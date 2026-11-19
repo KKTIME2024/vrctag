@@ -4,7 +4,10 @@ import { statusLabels, type Language } from "./i18n";
 import { getStyle, defaultStyleId } from "./styles";
 import { sampledStroke } from "./printability";
 import { validateMesh } from "./mesh-validation";
-import { scaleDesignGeometry } from "./size-scale";
+import { scaleDesignGeometry, scaleRatio } from "./size-scale";
+import { materialPlan } from "./materials";
+import { resolvedDot, type Status } from "./status-colors";
+export { statuses, resolvedDot, type Status } from "./status-colors";
 export { validateMesh } from "./mesh-validation";
 import ClipperLib from "clipper-lib";
 import * as THREE from "three";
@@ -64,14 +67,6 @@ export interface Base {
     };
   };
 }
-export const statuses = {
-  Online: "#2ed319",
-  "Join Me": "#00b8ff",
-  "Ask Me": "#e97c03",
-  Busy: "#c80928",
-  Offline: "#8c939c",
-};
-export type Status = keyof typeof statuses;
 export interface Config {
   styleId?: string;
   hangingLoop?: boolean;
@@ -107,8 +102,6 @@ export const defaults: Config = {
 };
 export const statusIsHidden = (c: Config) => c.hideStatus ?? (getStyle(c.styleId).id === "native");
 export const statusText = (c: Config) => statusIsHidden(c) ? "" : c.statusMode === "preset" ? statusLabels[c.language ?? "zh"][c.status] : c.customStatus;
-export const resolvedDot = (c: Config) =>
-  c.dotColor === "auto" ? statuses[c.status] : c.dotColor;
 export interface Design {
   previewAvatar?: Part;
   styleId?: string;
@@ -423,14 +416,6 @@ function makeText(
     const thin = Math.min(...strokes);
     (design.strokeScreening ??= {})[name] = thin;
   }
-  if (actual < base.layout.textRules.minimumHeight)
-    design.errors.push(
-      `${name} 缩放后仅 ${actual.toFixed(1)} mm 高，请缩短文字。`,
-    );
-  else if (actual < base.layout.textRules.warningHeight)
-    design.warnings.push(
-      `${name} 高 ${actual.toFixed(1)} mm；细笔画可能小于 0.4 mm，请检查切片。`,
-    );
   merged.vertices = merged.vertices.map(([vx, vy, vz]) => [
     (name === "Status_Text"
       ? (base.layout.statusTextLeft ?? base.layout.textLeft)
@@ -468,7 +453,8 @@ export function buildDesign(
     )
   )
     d.errors.push("单个文字字段最多 120 个字符。");
-  if (d.errors.length) return d;
+  if (d.errors.length)
+    return scaleDesignGeometry(d, c, base.layout.textRules.minimumHeight);
   d.parts = base.parts
     .filter((p) => p.name !== "Hanging_Loop" || c.hangingLoop !== false)
     .map((p) => ({
@@ -516,10 +502,36 @@ export function buildDesign(
     const part = makeText(text, font, name, color, h, y, base, d);
     if (part) d.parts.push(part);
   }
-  if (d.errors.length) return d;
+  // Restored custom filament settings must be visible in both preview and GLB.
+  // Keep visual mode and the original no-customization appearance unchanged.
+  if (
+    c.printMode !== "visual" &&
+    (c.filamentColors !== undefined || c.materialSlots !== undefined)
+  ) {
+    const plan = materialPlan(c, d.parts);
+    d.parts = d.parts.map((part, i) => ({ ...part, color: plan.parts[i].color }));
+  }
   // The complete generated mesh is scaled once. Preview, 3MF and GLB all
-  // consume these same real-world millimeter coordinates.
+  // consume these same real-world millimeter coordinates, including invalid
+  // previews that remain visible while the user corrects unsupported/small text.
   const scaled = scaleDesignGeometry(d, c, base.layout.textRules.minimumHeight);
+  const xy = scaleRatio(c.planarScale);
+  for (const [name, baselineHeight] of Object.entries(d.textHeights)) {
+    const actual = scaled.textHeights[name];
+    // Preserve the established 50–100% acceptance boundary: shrinking an
+    // otherwise valid design remains allowed with the existing warnings.
+    // Enlargement can rescue text once its final height reaches the threshold.
+    const checkedHeight = baselineHeight * Math.max(1, xy);
+    if (checkedHeight < rules.minimumHeight)
+      scaled.errors.push(
+        `${name} 缩放后仅 ${actual.toFixed(1)} mm 高，请缩短文字。`,
+      );
+    else if (checkedHeight < rules.warningHeight)
+      scaled.warnings.push(
+        `${name} 高 ${actual.toFixed(1)} mm；细笔画可能小于 0.4 mm，请检查切片。`,
+      );
+  }
+  if (scaled.errors.length) return scaled;
   for (const p of scaled.parts) {
     const report = validateMesh(p);
     if (!report.valid)
