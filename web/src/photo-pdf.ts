@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
-// Print one locally uploaded avatar at nominal model dimensions on exact-size paper.
+// Print one or a tightly packed sheet of avatars at nominal model dimensions.
 // All page positions are in PDF points: 1 inch = 72pt = 25.4mm.
 
 export type PhotoPaperId = "a4" | "4r" | "4r100" | "3r" | "5r";
+export type PhotoPrintMode = "single" | "multiple";
 export interface PhotoPaper {
   id: PhotoPaperId;
   widthMm: number;
@@ -29,6 +30,7 @@ export interface PhotoPdfData {
   paperId: PhotoPaperId;
   styleName: string;
   planarPercent: number;
+  mode?: PhotoPrintMode;
   layout: AvatarPhotoLayout;
   imageJpeg: Uint8Array;
   imageWidth: number;
@@ -38,6 +40,66 @@ export interface PhotoPdfData {
 export const toPdfPoints = (millimeters: number): number => millimeters * 72 / 25.4;
 export const photoDiameterMm = (layout: AvatarPhotoLayout, planarPercent: number): number =>
   layout.radiusMm * 2 * planarPercent / 100;
+
+export interface PhotoPdfPlan {
+  columns: number;
+  rows: number;
+  diameterMm: number;
+  positions: ReadonlyArray<{ xMm: number; yMm: number }>;
+  calibrationYmm: number | null;
+}
+
+/**
+ * Keep each photo at true physical size. Multiple mode is a maximum-count
+ * centered grid: 1.5 mm minimum border and 0.5 mm cutting gap.
+ * A photo lab/printer with a wider nonprintable edge may clip outer circles.
+ */
+export function planPhotoPdf(
+  paperId: PhotoPaperId,
+  layout: AvatarPhotoLayout,
+  planarPercent: number,
+  mode: PhotoPrintMode = "single",
+): PhotoPdfPlan {
+  const paper = PHOTO_PAPERS.find((p) => p.id === paperId);
+  if (!paper) throw Error("Unsupported paper format");
+  if (!Number.isFinite(planarPercent) || planarPercent < 50 || planarPercent > 150)
+    throw Error("Invalid XY scale");
+  if (!Number.isFinite(layout.radiusMm) || layout.radiusMm <= 0)
+    throw Error("Invalid avatar radius");
+  if (mode !== "single" && mode !== "multiple") throw Error("Invalid photo print mode");
+  const d = photoDiameterMm(layout, planarPercent);
+  if (mode === "single") {
+    if (d + 12 > paper.widthMm || d + 35 > paper.heightMm)
+      throw Error("Photo exceeds paper with safe print margins");
+    const centerY = paper.heightMm / 2 + 7;
+    return {
+      columns: 1, rows: 1, diameterMm: d,
+      positions: [{ xMm: paper.widthMm / 2, yMm: centerY }],
+      calibrationYmm: centerY - d / 2 - 11,
+    };
+  }
+  const margin = 1.5;  // compact photo-lab layout, not guaranteed printable
+  const gap = 0.5;     // small nonoverlapping dotted cut guides
+  const columns = Math.floor((paper.widthMm - 2 * margin + gap + 1e-8) / (d + gap));
+  const rows = Math.floor((paper.heightMm - 2 * margin + gap + 1e-8) / (d + gap));
+  if (columns < 1 || rows < 1) throw Error("Photo is too large for the selected paper");
+  const gridW = columns * d + (columns - 1) * gap;
+  const gridH = rows * d + (rows - 1) * gap;
+  const startX = (paper.widthMm - gridW + d) / 2;
+  const startY = (paper.heightMm - gridH + d) / 2;
+  const positions = Array.from({ length: columns * rows }, (_, index) => ({
+    xMm: startX + (index % columns) * (d + gap),
+    yMm: startY + Math.floor(index / columns) * (d + gap),
+  }));
+  const freeBelowMm = (paper.heightMm - gridH) / 2;
+  // No calibration line is drawn on an already full sheet where it could
+  // overlap the printed photos. Use single mode for initial calibration.
+  return {
+    columns, rows, diameterMm: d, positions,
+    calibrationYmm: freeBelowMm >= 11 ? freeBelowMm - 3 : null,
+  };
+}
+
 const fmt = (n: number): string => Number(n.toFixed(6)).toString();
 
 function photoOutline(layout: AvatarPhotoLayout, ratio: number): [number, number][] {
@@ -98,42 +160,52 @@ export function buildPhotoPdf(data: PhotoPdfData): Uint8Array {
   if (data.imageJpeg.length < 4 || data.imageJpeg[0] !== 0xff || data.imageJpeg[1] !== 0xd8)
     throw Error("Expected a JPEG image");
 
+  const mode = data.mode ?? "single";
+  const plan = planPhotoPdf(data.paperId, data.layout, data.planarPercent, mode);
   const width = toPdfPoints(paper.widthMm), height = toPdfPoints(paper.heightMm);
   const ratio = data.planarPercent / 100;
-  const diameter = photoDiameterMm(data.layout, data.planarPercent);
-  if (diameter + 12 > paper.widthMm || diameter + 35 > paper.heightMm)
-    throw Error("Photo exceeds paper with safe print margins");
+  const diameter = plan.diameterMm;
   const circlePt = toPdfPoints(diameter);
-  const centerX = width / 2;
-  const centerY = height / 2 + toPdfPoints(7);
   const radiusPt = circlePt / 2;
-  const path = pdfPath(photoOutline(data.layout, ratio), centerX, centerY);
-  const calibrationPt = toPdfPoints(20);
-  const calX = centerX - calibrationPt / 2;
-  const calY = centerY - radiusPt - toPdfPoints(11);
-  const labelY = height - toPdfPoints(12);
-  const footerY = toPdfPoints(7);
-  const content = [
+  const outline = photoOutline(data.layout, ratio);
+  const contentParts: string[] = [
     "q", "1 1 1 rg", `${fmt(0)} ${fmt(0)} ${fmt(width)} ${fmt(height)} re f`, "Q",
-    "q", path, "W n",
-    `${fmt(circlePt)} 0 0 ${fmt(circlePt)} ${fmt(centerX - radiusPt)} ${fmt(centerY - radiusPt)} cm`,
-    "/Im1 Do", "Q",
-    // Thin vector cut guide. Do not use automatic borderless enlargement.
-    "q", "0.25 0.25 0.25 RG", "0.35 w", "[2 2] 0 d", path, "S", "Q",
-    "q", "0.12 0.18 0.2 rg", "BT", "/F1 10 Tf",
-    `${fmt(toPdfPoints(9))} ${fmt(labelY)} Td`,
-    `(${pdfText(`VRC TAG PHOTO | ${data.styleName} | ${fmt(diameter)} mm`)}) Tj`, "ET", "Q",
-    "q", "0.1 0.1 0.1 RG", "0.45 w",
-    `${fmt(calX)} ${fmt(calY)} m ${fmt(calX + calibrationPt)} ${fmt(calY)} l S`,
-    `${fmt(calX)} ${fmt(calY - toPdfPoints(1))} m ${fmt(calX)} ${fmt(calY + toPdfPoints(1))} l S`,
-    `${fmt(calX + calibrationPt)} ${fmt(calY - toPdfPoints(1))} m ${fmt(calX + calibrationPt)} ${fmt(calY + toPdfPoints(1))} l S`, "Q",
-    "q", "0.25 0.25 0.25 rg", "BT", "/F1 8 Tf",
-    `${fmt(centerX - toPdfPoints(18))} ${fmt(calY - toPdfPoints(5))} Td`,
-    "(20 mm calibration bar) Tj", "ET", "Q",
-    "q", "0.3 0.3 0.3 rg", "BT", "/F1 7 Tf",
-    `${fmt(toPdfPoints(9))} ${fmt(footerY)} Td`,
-    "(Actual size 100% | No Fit to Page | No borderless enlargement) Tj", "ET", "Q",
-  ].join("\n") + "\n";
+  ];
+  for (const position of plan.positions) {
+    const centerX = toPdfPoints(position.xMm), centerY = toPdfPoints(position.yMm);
+    const path = pdfPath(outline, centerX, centerY);
+    contentParts.push(
+      "q", path, "W n",
+      `${fmt(circlePt)} 0 0 ${fmt(circlePt)} ${fmt(centerX - radiusPt)} ${fmt(centerY - radiusPt)} cm`,
+      "/Im1 Do", "Q",
+      "q", "0.25 0.25 0.25 RG", "0.35 w", "[2 2] 0 d", path, "S", "Q",
+    );
+  }
+  const calibrationPt = toPdfPoints(20);
+  if (plan.calibrationYmm !== null) {
+    const calX = width / 2 - calibrationPt / 2;
+    const calY = toPdfPoints(plan.calibrationYmm);
+    contentParts.push(
+      "q", "0.1 0.1 0.1 RG", "0.45 w",
+      `${fmt(calX)} ${fmt(calY)} m ${fmt(calX + calibrationPt)} ${fmt(calY)} l S`,
+      `${fmt(calX)} ${fmt(calY - toPdfPoints(1))} m ${fmt(calX)} ${fmt(calY + toPdfPoints(1))} l S`,
+      `${fmt(calX + calibrationPt)} ${fmt(calY - toPdfPoints(1))} m ${fmt(calX + calibrationPt)} ${fmt(calY + toPdfPoints(1))} l S`, "Q",
+      "q", "0.25 0.25 0.25 rg", "BT", "/F1 8 Tf",
+      `${fmt(width / 2 - toPdfPoints(18))} ${fmt(calY - toPdfPoints(mode === "single" ? 5 : 3))} Td`,
+      "(20 mm calibration bar) Tj", "ET", "Q",
+    );
+  }
+  if (mode === "single") {
+    contentParts.push(
+      "q", "0.12 0.18 0.2 rg", "BT", "/F1 10 Tf",
+      `${fmt(toPdfPoints(9))} ${fmt(height - toPdfPoints(12))} Td`,
+      `(${pdfText(`VRC TAG PHOTO | ${data.styleName} | ${fmt(diameter)} mm`)}) Tj`, "ET", "Q",
+      "q", "0.3 0.3 0.3 rg", "BT", "/F1 7 Tf",
+      `${fmt(toPdfPoints(9))} ${fmt(toPdfPoints(7))} Td`,
+      "(Actual size 100% | No Fit to Page | No borderless enlargement) Tj", "ET", "Q",
+    );
+  }
+  const content = contentParts.join("\n") + "\n";
 
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -174,6 +246,7 @@ export async function generatePhotoPdf(
   styleName: string,
   planarPercent: number,
   layout: AvatarPhotoLayout,
+  mode: PhotoPrintMode = "single",
 ): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   try {
@@ -191,7 +264,7 @@ export async function generatePhotoPdf(
     );
     const jpg = new Uint8Array(await imageBlob.arrayBuffer());
     const pdf = buildPhotoPdf({
-      paperId, styleName, planarPercent, layout,
+      paperId, styleName, planarPercent, layout, mode,
       imageJpeg: jpg, imageWidth: outputSide, imageHeight: outputSide,
     });
     return new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
