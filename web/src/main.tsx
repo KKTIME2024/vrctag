@@ -16,6 +16,7 @@ import { scaledDimensions, referenceDimensions, clampScale, percentFromMillimete
 import { SizeNumberInput } from "./SizeNumberInput";
 import { takeStarPromptOpportunity } from "./star-prompt";
 import { Preview } from "./Preview";
+import { PHOTO_PAPERS, generatePhotoPdf, type PhotoPaperId } from "./photo-pdf";
 import {
   defaults,
   statuses,
@@ -44,6 +45,11 @@ function App() {
   }));
   const [design, setDesign] = useState<Design | null>(null);
   const [avatar, setAvatar] = useState("");
+  const printAvatarFile = useRef<File | null>(null);
+  const [avatarSourceSize, setAvatarSourceSize] = useState(0);
+  const [photoPaperId, setPhotoPaperId] = useState<PhotoPaperId>("4r");
+  const [photoPdfBusy, setPhotoPdfBusy] = useState(false);
+  const [photoPdfError, setPhotoPdfError] = useState("");
   const [pronounMode, setPronounMode] = useState("None");
   const [busy, setBusy] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -246,6 +252,9 @@ function App() {
         );
       bitmap.close();
       setAvatar(canvas.toDataURL("image/png"));
+      printAvatarFile.current = file;
+      setAvatarSourceSize(size);
+      setPhotoPdfError("");
       setAvatarName(file.name);
       setAvatarError("");
     } catch {
@@ -296,6 +305,9 @@ function App() {
     setConfig({ ...defaults, language, statusMode: "preset" });
     setPronounMode("None");
     setAvatar("");
+    printAvatarFile.current = null;
+    setAvatarSourceSize(0);
+    setPhotoPdfError("");
     setAvatarName("未上传头像");
     setNotice("");
     setAvatarError("");
@@ -319,6 +331,28 @@ function App() {
       ? design.size
       : scaledDimensions(referenceSize, config);
   const mm = (value: number) => value.toFixed(2);
+  const paper = PHOTO_PAPERS.find((entry) => entry.id === photoPaperId)!;
+  const photoPpi = avatarSourceSize ? Math.round(Math.min(1200, avatarSourceSize) * 25.4 / avatarDiameter) : 0;
+  const downloadPhotoPdf = async () => {
+    const file = printAvatarFile.current;
+    if (!file || photoPdfBusy) return;
+    setPhotoPdfBusy(true);
+    setPhotoPdfError("");
+    try {
+      const avatarLayout = style.layout.avatar;
+      const pdf = await generatePhotoPdf(file, photoPaperId, style.name, config.planarScale ?? 100, {
+        radiusMm: avatarLayout.radius,
+        dotOffsetXmm: avatarLayout.dotCenter[0] - avatarLayout.center[0],
+        dotOffsetYmm: avatarLayout.dotCenter[1] - avatarLayout.center[1],
+        dotRadiusMm: avatarLayout.dotRadius,
+      });
+      download(pdf, `vrc-tag-photo-${style.id}-${photoPaperId}-${mm(avatarDiameter)}mm.pdf`, "application/pdf");
+      promptStarAfterExport();
+    } catch (error) {
+      console.error("Photo PDF export failed", error);
+      setPhotoPdfError("照片 PDF 导出失败，请重试。");
+    } finally { setPhotoPdfBusy(false); }
+  };
   const updatePlanarPercent = (raw: number) => {
     const value = clampScale(raw);
     if (Math.abs(value - (config.planarScale ?? 100)) > 0.0000001)
@@ -528,6 +562,9 @@ function App() {
                       avatarGeneration.current++;
                       setAvatarError("");
                       setAvatar("");
+                      printAvatarFile.current = null;
+                      setAvatarSourceSize(0);
+                      setPhotoPdfError("");
                       setAvatarName("未上传头像");
                       if (upload.current) upload.current.value = "";
                     }}
@@ -558,12 +595,38 @@ function App() {
               <p className="field-note">
                 {t("头像用于预览和 GLB 贴图；3MF 不包含照片。")}
               </p>
+
+              <div className="photo-pdf-print">
+                <label htmlFor="photo-paper">{t("照片打印纸张")}</label>
+                <select id="photo-paper" value={photoPaperId} onChange={(event) => setPhotoPaperId(event.target.value as PhotoPaperId)}>
+                  {PHOTO_PAPERS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label} — {item.widthMm} × {item.heightMm} mm
+                    </option>
+                  ))}
+                </select>
+                <p className="photo-pdf-size">
+                  {t("PDF 页面实际尺寸")} <strong>{paper.widthMm} × {paper.heightMm} mm</strong>
+                  <span>{t("头像裁剪直径")} <strong>{mm(avatarDiameter)} mm</strong></span>
+                </p>
+                {avatar && <p className="field-note">{t("上传图像的裁剪边长")} {avatarSourceSize} px · {t("估算有效分辨率")} {photoPpi} ppi</p>}
+                <button className="photo-pdf-button" type="button" disabled={!avatar || photoPdfBusy}
+                  onClick={() => void downloadPhotoPdf()}>
+                  {t(photoPdfBusy ? "正在制作照片 PDF…" : "下载照片打印 PDF")} ↓
+                </button>
+                {!avatar && <p className="field-note">{t("上传头像后可以下载包含照片的 PDF。")}</p>}
+                {photoPdfError && <p role="alert" className="error">{t(photoPdfError)}</p>}
+                <p className="field-note">{t("推荐使用与打印机兼容的亮面或绒面相纸；按包装尺寸选纸，不要把 100×150 mm 与 4R 混为一谈。")}</p>
+                <p className="field-note">{t("可先试用 180–230 g/m² 相纸；克重不是实际厚度。Native 默认头像面比白框低约 0.35 mm，纸加胶可能超过边框。")}</p>
+                <p className="field-note">{t("PDF 已按毫米排版：打印选实际尺寸 100%，关闭适应纸张和无边距自动扩展；先用尺量 PDF 内的 20 mm 校准线。")}</p>
+                <p className="field-note">{t("一页一张照片；Native 的 PDF 已自动避开状态点并附裁切虚线。")}</p>
+              </div>
               <details className="avatar-print-notes">
                 <summary>{t("纸张打印与裁剪说明")}</summary>
                 <p>{t(style.id === "classic"
                   ? "按显示直径裁圆后粘贴；头像面与白框齐平，没有插纸卡槽。"
                   : "显示的是完整圆的直径；右下角需剪出状态点缺口，再粘贴到头像面。")}</p>
-                <p>{t("先在排版软件将照片设为显示的毫米直径。图片居中裁剪；按实际尺寸 / 100% 打印，关闭适应页面；切片器再次缩放模型时，纸片也要同比缩放。")}</p>
+                <p>{t("直接下载照片 PDF，图片会按显示毫米数居中裁剪。打印 100%/实际尺寸，关闭适应纸张；如在切片器再次缩放模型，纸片也须同比缩放。")}</p>
                 <p>{t("尺寸为模型名义值，纸厚、胶厚和裁剪余量仍需实物试贴确认。")}</p>
               </details>
             </section>

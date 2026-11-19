@@ -1015,3 +1015,16 @@ footer a {
 .size-scaling-label>.size-numeric{flex:none}
 .size-scaling-hint+.size-scaling-hint{margin-top:6px}
 @media(max-width:420px){.size-scaling-unit{font-size:10px}.size-numeric input[type="number"]{width:88px;padding-left:7px}.size-measure{gap:7px}.size-scaling-millimeters{gap:10px}}
+
+/* One-page, exact-size, locally generated photo cutout PDF. */
+.photo-pdf-print{margin-top:20px;padding:17px 15px;border:1px solid #43594d;border-radius:12px;background:#1c3028}
+.photo-pdf-print>label{display:block;font-size:12px;font-weight:600;color:#d3e9cd;margin-bottom:8px}
+.photo-pdf-print select{width:100%;max-width:100%;margin:0;background:#101e1a;color:#e5f0df}
+.photo-pdf-print .field-note{line-height:1.65;margin:11px 0 0;overflow-wrap:anywhere}
+.photo-pdf-size{margin:12px 0 8px;font-size:11px;color:#abc5b2;line-height:1.9}
+.photo-pdf-size>span{display:block}
+.photo-pdf-size strong{font-family:ui-monospace,monospace;color:#e0eadb;font-variant-numeric:tabular-nums}
+.photo-pdf-button{display:block;width:100%;padding:11px 12px;margin:14px 0 3px;border:1px solid #bbd49d;border-radius:8px;background:#bbd49d;color:#1b2b1e;font-size:12px;font-weight:650;text-align:center}
+.photo-pdf-button:hover:enabled{background:#d1e6b4}
+.photo-pdf-button:disabled{cursor:not-allowed;opacity:.55}
+@media(max-width:420px){.photo-pdf-print{padding:14px 12px}.photo-pdf-size{font-size:10px}}

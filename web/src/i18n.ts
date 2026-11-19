@@ -46,6 +46,20 @@ export const statusLabels: Record<Language, Record<string, string>> = {
 // Busy is the legacy API identifier for red Do Not Disturb; orange Ask Me is Chinese 忙碌.
 // Japanese wording is retained pending a current primary-source/client verification.
 const rows: Record<string, [string, string, string]> = {
+  "照片打印纸张": ["写真用紙のサイズ","사진 인화지 크기","Photo print paper"],
+  "PDF 页面实际尺寸": ["PDF の用紙実寸","PDF 용지 실제 크기","PDF page dimensions"],
+  "头像裁剪直径": ["写真の切り抜き直径","사진 재단 지름","Photo cut diameter"],
+  "上传图像的裁剪边长": ["画像の切り抜き幅","업로드 사진의 정사각형 크기","Source crop width"],
+  "估算有效分辨率": ["推定解像度","추정 유효 해상도","Estimated resolution"],
+  "正在制作照片 PDF…": ["写真 PDF を作成中…","사진 PDF 생성 중…","Creating photo PDF…"],
+  "下载照片打印 PDF": ["写真印刷用 PDF を保存","사진 인쇄 PDF 다운로드","Download print-ready photo PDF"],
+  "上传头像后可以下载包含照片的 PDF。": ["画像をアップロードすると写真入りの PDF を保存できます。","사진을 업로드하면 인쇄용 PDF를 내려받을 수 있습니다.","Upload a photo to download a printable PDF."],
+  "照片 PDF 导出失败，请重试。": ["写真 PDF の作成に失敗しました。再試行してください。","사진 PDF 생성에 실패했습니다. 다시 시도하세요.","Photo PDF export failed. Please retry."],
+  "推荐使用与打印机兼容的亮面或绒面相纸；按包装尺寸选纸，不要把 100×150 mm 与 4R 混为一谈。": ["プリンター対応の光沢紙または微粒面紙がおすすめ。実際の用紙サイズを選び、100×150 mm と4Rを混同しないでください。","프린터와 호환되는 광택 또는 러스터 인화지를 권장합니다. 포장의 실제 크기를 확인하고 100×150mm와 4R을 혼동하지 마세요.","Use printer-compatible glossy or luster photo paper. Match the package size: 100×150 mm and 4R are different."],
+  "可先试用 180–230 g/m² 相纸；克重不是实际厚度。Native 默认头像面比白框低约 0.35 mm，纸加胶可能超过边框。": ["まず180–230 g/m²程度をお試しください。坪量は厚さではありません。Nativeの段差は標準で約0.35 mmのため、紙と接着剤が縁より高くなる場合があります。","180–230 g/m² 용지를 먼저 시험해 보세요. 평량은 두께와 다릅니다. Native 기본 단차는 약 0.35mm이므로 종이와 접착제가 테두리보다 높을 수 있습니다.","Try 180–230 g/m² photo paper first; paper weight is not thickness. Native has only about 0.35 mm of default rim clearance, so paper plus adhesive may protrude."],
+  "PDF 已按毫米排版：打印选实际尺寸 100%，关闭适应纸张和无边距自动扩展；先用尺量 PDF 内的 20 mm 校准线。": ["PDFは実寸mmで配置済みです。印刷は100%・実際のサイズを選び、ページに合わせる／フチなし自動拡大を無効にしてください。20 mmの確認線を定規で測ってください。","PDF는 실제 mm 크기로 배치됩니다. 100%/실제 크기로 인쇄하고 페이지 맞춤 및 여백 없는 자동 확대를 끄세요. 20mm 확인 선을 자로 재보세요.","The PDF uses real millimeters. Print at Actual Size / 100%, disable Fit to Page and borderless expansion, then measure the 20 mm calibration bar."],
+  "一页一张照片；Native 的 PDF 已自动避开状态点并附裁切虚线。": ["1ページに写真1枚。Nativeはステータス点を避けた形状で、切り取り線付きです。","한 페이지에 사진 한 장씩 인쇄합니다. Native는 상태 점을 피해 잘라지며 점선 재단 가이드가 포함됩니다.","One photo per sheet. Native has an automatic status-dot notch and dashed cut guide."],
+  "直接下载照片 PDF，图片会按显示毫米数居中裁剪。打印 100%/实际尺寸，关闭适应纸张；如在切片器再次缩放模型，纸片也须同比缩放。": ["写真PDFを保存すると表示mmサイズで中央切り抜きされます。実寸100%で印刷し、ページに合わせる設定を無効にしてください。スライサーでモデルを変更したら写真も同率で変更します。","사진 PDF를 내려받으면 표시된 mm 크기에 맞춰 가운데를 잘라냅니다. 100%/실제 크기로 인쇄하고 페이지 맞춤을 끄세요. 슬라이서에서 모델을 확대·축소하면 사진도 같은 비율로 조정하세요.","Download the photo PDF for a centered crop at the displayed millimeter size. Print Actual Size / 100% with Fit to Page off. If you later rescale the 3D model in your slicer, rescale the photo equally."],
   "照片区域直径": ["写真領域の直径", "사진 영역 지름", "Photo area diameter"],
   "头像用于预览和 GLB 贴图；3MF 不包含照片。": [
     "画像はプレビューとGLBのテクスチャに使われます。3MFには写真は含まれません。",
