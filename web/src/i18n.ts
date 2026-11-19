@@ -46,6 +46,17 @@ export const statusLabels: Record<Language, Record<string, string>> = {
 // Busy is the legacy API identifier for red Do Not Disturb; orange Ask Me is Chinese 忙碌.
 // Japanese wording is retained pending a current primary-source/client verification.
 const rows: Record<string, [string, string, string]> = {
+  "照片排版方式": ["写真の配置","사진 배치","Photo layout"],
+  "单张": ["1枚","한 장","Single photo"],
+  "多张（铺满页面）": ["複数（用紙を最大限に使用）","여러 장 (용지 가득 채우기)","Multiple (fill the sheet)"],
+  "本页照片数量": ["1ページあたり","한 장당 사진 수","Photos per sheet"],
+  "张": ["枚","장","pcs"],
+  "PDF 已按毫米排版：打印选实际尺寸 100%，关闭适应纸张和无边距自动扩展。": ["PDFは実寸mmで配置済みです。印刷は100%・実際のサイズを選び、ページに合わせる／フチなし自動拡大を無効にしてください。","PDF는 실제 mm 크기로 배치됩니다. 100%/실제 크기로 인쇄하고 페이지 맞춤과 여백 없는 자동 확대를 끄세요.","PDF uses exact millimeters. Print at Actual Size / 100%, disabling Fit to Page and borderless auto enlargement."],
+  "单张 PDF 包含 20 mm 校准线，可先试印量尺。": ["1枚モードには20mmの確認線があります。最初に試し印刷して測ってください。","한 장 모드에는 20mm 확인 선이 있습니다. 먼저 시험 인쇄 후 자로 재세요.","Single-photo mode includes a 20 mm calibration bar. Make a test print and measure it first."],
+  "多张模式自动紧凑铺满页面，每张实际尺寸不变；最外侧照片可能离纸边仅约 1.5 mm，请确认打印机可印范围。": ["複数モードは実寸のまま用紙に詰めて配置します。端の余白が約1.5mmになる場合があるため印刷可能領域を確認してください。","여러 장 모드는 실제 크기를 유지한 채 촘촘히 배치합니다. 바깥 여백이 약 1.5mm일 수 있으니 인쇄 가능 영역을 확인하세요.","Multiple mode packs the page without resizing photos. Some photo edges may be only 1.5 mm from the page edge; confirm your printer's printable area."],
+  "密排空间不足，已省略校准线；建议先切换单张试印测量，再下载多张。": ["詰めた用紙には確認線を入れられないため省略しました。先に1枚モードで実寸を確認してください。","공간이 부족해 확인 선을 생략했습니다. 한 장 모드에서 먼저 크기를 확인한 후 여러 장을 인쇄하세요.","Packing leaves no safe space for a calibration bar. Test the single-photo version first, then print a full sheet."],
+  "本页空白处保留 20 mm 校准线，打印后请测量。": ["余白に20mmの確認線があります。印刷後に測ってください。","용지 여백에 20mm 확인 선이 있습니다. 인쇄 후 측정해 주세요.","The unused margin contains a 20 mm calibration bar. Measure it after printing."],
+  "Native 的 PDF 会自动避开状态点，并为每张照片附加裁剪虚线。": ["NativeのPDFはステータスドットを避け、各写真に切り取り線を付けます。","Native PDF는 상태 점을 피해 사진마다 점선 재단 가이드를 포함합니다.","Native PDF includes the status-dot notch and dashed cut line on every photo."],
   "6寸相纸（4R）": ["6インチ写真用紙（4R）","6인치 인화지 (4R)","6-inch photo paper (4R)"],
   "6寸相纸（100×150）": ["6インチ写真用紙（100×150）","6인치 인화지 (100×150)","6-inch photo paper (100×150)"],
   "5寸相纸（3R）": ["5インチ写真用紙（3R）","5인치 인화지 (3R)","5-inch photo paper (3R)"],
