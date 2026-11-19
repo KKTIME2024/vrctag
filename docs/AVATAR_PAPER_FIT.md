@@ -1,38 +1,48 @@
-# 头像照片尺寸与贴合说明
+# Avatar photo: measured PDF paper layout
 
-核对日期：2026-11-19。依据 `web/src/styles.catalog.json`、运行用的两套 `base.json` 真实顶点、`studio/scripts/model_geometry.py` 和 `web/src/size-scale.ts`。
+Updated 2026-11-19. The website creates a one-photo-per-page PDF locally from the **original uploaded image**, not from its 512px 3D preview thumbnail. The original is center-cropped to a square, then sampled at up to 1200px for print quality. No upload to a server is required.
 
-以下是模型的名义尺寸推算，尚未进行纸张打印或实物试贴。网页显示的照片直径随 XY 等比缩放；独立 Z 厚度缩放不改变纸片直径。
+## Paper sizes (actual MediaBox)
 
-| XY 比例 | Classic 照片直径 | Native 照片名义圆直径 |
+| Selector | PDF page size (mm) | Typical print-driver name |
+| --- | ---: | --- |
+| A4 | 210 × 297 | A4 |
+| 4R (4×6 in) | 101.6 × 152.4 | 4×6 / 102×152 |
+| 6 in regional | 100 × 150 | 100×150 mm (not equal to 4R) |
+| 3R (3.5×5 in) | 88.9 × 127 | 3.5×5 / 89×127 |
+| 5R (5×7 in) | 127 × 177.8 | 5×7 / 127×178 |
+
+**Changing the paper size never changes the photo cutout diameter.** PDF positions use exactly `72 / 25.4` points per millimeter, and the displayed avatar dimensions come from the same `styles.catalog.json` layout and XY percent as the 3D geometry. Z thickness scaling does not change photo dimensions.
+
+| XY percent | Classic diameter | Native nominal full-circle diameter |
 | --- | ---: | ---: |
 | 50% | 23.8 mm | 16 mm |
-| 100% | 47.6 mm | 32 mm |
+| 100% | **47.6 mm** | **32 mm** |
 | 150% | 71.4 mm | 48 mm |
 
-精确长度输入同样生效。例如名牌长 `100.01 mm` 时，Classic 照片直径约 `35.52594 mm`（显示 `35.53`），Native 约 `26.66933 mm`（显示 `26.67`）。纸片尺寸不随挂环开关直接变化；如果以整体宽度重新输入毫米值，新的 XY 比例也会作用于纸片。
+The exact-length example 100.01 mm has nominal photo diameters about 35.52594 mm (Classic) and 26.66933 mm (Native); the UI rounds them to 35.53/26.67 mm. **Classic's 52mm outer white rim is not the photo size.**
 
-## Classic：裁圆后粘贴
+## Shape and cutting
 
-100% 时，照片面直径是 **47.6 mm**。**52 mm 包含白边，不能用作照片直径。** 照片面与白框顶面均约在 Z=2.6 mm，二者齐平；当前没有插纸槽或压边，照片需要背胶或其他胶固定。
+Classic prints a circular photo. Its photo top and white rim are nominally flush at Z=2.6mm; attach paper using thin adhesive. There is no paper slot.
 
-初次手工裁切可以在名义直径基础上稍留余量，例如总直径减少 0.2–0.4 mm 后试贴；这只是试验建议，没有作为默认公差写入程序，也不是已验证适配值。
+Native's status dot overlaps the lower right of the circle. At 100%, the dot center relative to photo center is `(13, -10) mm`, radius `4.4 mm`; its inward intersection is about 4mm. The PDF cuts out exactly the circle-minus-dot contour in vector form and draws a dashed cut guide. The notch is not merely a visual annotation. Default Native photo surface Z=3.3mm, rim top Z=3.65mm: **0.35mm** nominal clearance, or 0.175/0.35/0.525mm at 50/100/150% Z.
 
-## Native：圆片右下方需避让状态点
+## Paper material and actual printing
 
-100% 时，头像名义圆直径为 **32 mm**。以头像中心为原点，状态点中心为 `(13, -10) mm`，半径 `4.4 mm`。状态点向头像圆内最大径向侵入约 `3.9988 mm`，照片需剪出相应缺口。模型与预览已包含该缺口。隐藏状态文字不会移除状态点，也不会填平缺口。
+For better photographic reproduction than plain copy paper, use **inkjet-compatible glossy, semi-gloss or luster photo paper** that is supported by your printer. A first trial of **180–230 g/m²** is reasonable, but grammage is **not** a calibrated measurement of thickness, and toner/inkjet compatibility matters. Native may protrude if paper plus adhesive exceeds the rim gap. Confirm physical fit before distributing.
 
-照片粘贴面约 Z=3.3 mm，白框顶约 Z=3.65 mm。纸张加胶若要低于框顶，名义高度差为 `0.35 × Z比例` mm：Z=50%/100%/150% 时分别为 **0.175/0.35/0.525 mm**。这只是几何高度，厚相纸加胶可能高出白框，需实物确认。
+1. Upload a PNG, JPEG, or WebP avatar. The original file is retained locally for PDF export; 3D/GLB preview continues to use a separate 512px crop.
+2. Set the final nameplate XY scale and choose the **actual physical paper dimensions printed on the package**.
+3. Download the one-photo PDF. It contains a **20mm vector calibration bar** and nominal diameter label, plus Native's notch as applicable.
+4. In the print dialog choose the matching page size, **Actual Size / 100%**, disable **Fit to Page** and **borderless auto-expansion**, and avoid printer-driver photo enlargement. A border is safer for accurate sizing.
+5. Measure the printed 20mm bar. If it is not exactly 20mm, do not cut the avatar yet; fix printer scaling and reprint. Even a mathematically exact PDF cannot control physical printer stretch or image-print services.
+6. Cut a plain-paper proof first, then photo paper. Trim only by real-world fitting; the PDF does not add an untested 0.2–0.4mm undersize tolerance. If you later rescale the model in a slicer, update the photo XY scale identically on the website.
 
-## 纸张打印步骤
+## Validation
 
-1. 使用原始照片，在排版软件中居中裁剪，并把照片区域设为网页显示的毫米直径。Native 需要在右下方避让状态点。
-2. 按“实际尺寸 / 100%”打印，关闭“适应页面”。仅选 100% 并不能给普通图片自动指定正确物理尺寸，必须先完成第 1 步。
-3. 如果又在切片器里改变了模型 XY 比例，照片也要按相同比例缩放。尽量在网页完成最终尺寸设置。
-4. 先用普通纸检查轮廓与贴合，再决定相纸和胶的厚度。纸张、胶和打印机误差尚未实测。
+The PDF module was exercised independently with a real JPEG source across **5 paper sizes × 2 styles × 3 XY scales = 30 PDFs**. PyMuPDF inspected the actual files: each MediaBox was within 0.0001mm of its requested physical paper size; each vector photo outline was within 0.015mm of nominal diameter; every calibration bar was exactly 20mm; one image and the required printable labels were present. A 3R 150%-Classic worst-case page and a 4R Native page were rendered visually with the project's PDF renderer. The initial label-layer and overlap bugs found during rendering were fixed and rechecked. The GitHub source is `web/src/photo-pdf.ts`; a Node structural test is in `web/tests/photo-pdf.test.ts`.
 
-## 现有图片功能范围
+**Limits:** no physical paper has been printed or glued in this release. The site's PDF maintains design dimensions, but individual printers, paper coatings, adhesives, and cutting methods remain unverified. 3MF still does not embed the photo (3D-printing colors are separate).
 
-上传图片会居中裁成 512×512，用于网页预览及 GLB 内嵌贴图。**3MF 不包含照片，也不生成纸张打印文件。** 当前没有 SVG/PDF 纸张排版导出。用原图自行排版打印不会受到预览贴图 512 px 的限制。
-
-本轮小修仅补充动态尺寸与上述说明，不改实体网格、槽口或裁切规则。可换照片的插槽、自动生成毫米裁剪模板、调整图片裁切中心等属于独立功能，需要另行评审。
+Reference for photo paper sizes: Epson's printer paper support documentation, which lists 4×6 at 102×152mm, 3.5×5 at 89×127mm, 5×7 at 127×178mm, and A4 at 210×297mm. Exact PDF dimensions use the underlying inch-to-mm conversion, not rounded driver labels.
