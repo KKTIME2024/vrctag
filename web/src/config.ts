@@ -25,6 +25,16 @@ export function parseConfig(input: unknown): Config {
     ) throw Error("缩放比例必须在 50–150% 之间");
     c[key] = value === undefined ? 100 : value as number;
   }
+  const nameFontScale = o.nameFontScale;
+  if (
+    nameFontScale !== undefined &&
+    (typeof nameFontScale !== "number" ||
+      !Number.isFinite(nameFontScale) ||
+      nameFontScale < 50 ||
+      nameFontScale > 150)
+  )
+    throw Error("名称字号比例必须在 50–150% 之间");
+  c.nameFontScale = nameFontScale === undefined ? 100 : nameFontScale;
   if(o.hideStatus !== undefined && typeof o.hideStatus !== "boolean") throw Error("无效状态显示设置");
   if(o.hideStatus !== undefined) c.hideStatus = o.hideStatus as boolean;
   if (

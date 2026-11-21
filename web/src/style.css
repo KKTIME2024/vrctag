@@ -1037,3 +1037,16 @@ footer a {
 .photo-print-mode-options label.selected{border-color:#bbd49d;background:#304837;color:#eff9df}
 .photo-print-mode-options input{accent-color:#bad69c;width:14px;height:14px;margin:0;cursor:pointer}
 .photo-print-mode-options label:focus-within{outline:2px solid #c9e2a7;outline-offset:2px}
+
+/* Uniform custom name font scale slider and numeric input under Display Name. */
+.name-font-control{margin-top:16px;padding:12px 13px;border:1px solid #2e3d37;border-radius:10px;background:#131d1d}
+.name-font-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.control-section .name-font-header label{margin:0;font-size:11px;color:#c7d5ce}
+.name-font-header .size-numeric input[type="number"]{width:68px;height:34px;padding:6px 4px 6px 8px;border:0;background:transparent}
+.control-section .name-font-control input.size-range[type="range"]{appearance:auto;-webkit-appearance:auto;display:block;width:100%;height:28px;margin:6px 0 2px;padding:0;border:0;border-radius:0;background:transparent;accent-color:#c9e2a7;cursor:pointer;touch-action:pan-y}
+.control-section .name-font-control input.size-range[type="range"]:focus-visible{outline:2px solid #c9e2a7;outline-offset:3px}
+.name-font-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:#8da89a}
+.name-font-meta strong{color:#e0eae2;font:600 12px ui-monospace,monospace;font-variant-numeric:tabular-nums;margin-left:4px}
+.name-font-reset{background:none;border:0;padding:0;color:#c9e2a7;font-size:11px;text-decoration:underline;text-underline-offset:2px}
+.name-font-reset:hover{color:#e1f3ca}
+.name-font-control .field-note{margin-top:7px;line-height:1.5}

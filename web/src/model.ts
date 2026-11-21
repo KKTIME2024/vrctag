@@ -4,7 +4,11 @@ import { statusLabels, type Language } from "./i18n";
 import { getStyle, defaultStyleId } from "./styles";
 import { sampledStroke } from "./printability";
 import { validateMesh } from "./mesh-validation";
-import { scaleDesignGeometry, scaleRatio } from "./size-scale";
+import {
+  nameFontScaleRatio,
+  scaleDesignGeometry,
+  scaleRatio,
+} from "./size-scale";
 import { materialPlan } from "./materials";
 import { resolvedDot, type Status } from "./status-colors";
 export { statuses, resolvedDot, type Status } from "./status-colors";
@@ -78,6 +82,8 @@ export interface Config {
   planarScale?: number;
   /** Separate Z thickness percent. */
   thicknessScale?: number;
+  /** Custom name font scale percent relative to the style's default title size (50–150). */
+  nameFontScale?: number;
   filamentColors?: string[];
   materialSlots?: Record<string, number>;
   displayName: string;
@@ -93,6 +99,7 @@ export const defaults: Config = {
   printMode: "cfs4",
   planarScale: 100,
   thicknessScale: 100,
+  nameFontScale: 100,
   displayName: "Nagikokoro",
   friend: false,
   status: "Online",
@@ -112,6 +119,7 @@ export interface Design {
   errors: string[];
   textHeights: Record<string, number>;
   strokeScreening?: Record<string, number>;
+  nameFontClamped?: boolean;
 }
 export function geometry(p: Part) {
   const g = new THREE.BufferGeometry();
@@ -123,6 +131,72 @@ export function geometry(p: Part) {
   g.computeVertexNormals();
   return g;
 }
+// Reference height of the default title ("Nagikokoro" at font size 100) in Noto Sans CJK SC Bold.
+const REFERENCE_NAME_BOX = 105.4;
+// Reserve 4 mm inside the right end curve for Name text without mutating base.layout.
+const NAME_RIGHT_MARGIN = 4;
+
+/** Convert a Clipper PolyTree back into Three.js Shapes while preserving nested islands. */
+function polyTreeToShapes(
+  tree: ClipperLib.PolyTree,
+  scale: number,
+): THREE.Shape[] {
+  const shapes: THREE.Shape[] = [];
+  const cleanPoints = (contour: ClipperLib.IntPoint[]) =>
+    ClipperLib.Clipper.CleanPolygon(contour, 100).map(
+      (p) => new THREE.Vector2(p.X / scale, p.Y / scale),
+    );
+  const walk = (node: ClipperLib.PolyNode) => {
+    if (!node.IsHole() && node.Contour().length) {
+      const outer = cleanPoints(node.Contour());
+      if (outer.length >= 3) {
+        const shape = new THREE.Shape(outer);
+        shape.holes = node
+          .Childs()
+          .filter((c) => c.IsHole())
+          .map((c) => cleanPoints(c.Contour()))
+          .filter((pts) => pts.length >= 3)
+          .map((pts) => new THREE.Path(pts));
+        shapes.push(shape);
+      }
+    }
+    for (const child of node.Childs()) walk(child);
+  };
+  walk(tree);
+  return shapes;
+}
+
+/**
+ * Convert font subpaths via Clipper Non-Zero winding so arbitrary contour
+ * ordering (e.g. Noto "电", "回", "明") preserves every hole and nested island.
+ */
+function subPathsToShapes(shapePath: THREE.ShapePath): THREE.Shape[] {
+  const scale = 100000;
+  const paths: ClipperLib.IntPoint[][] = [];
+  for (const sub of shapePath.subPaths) {
+    const pts = sub.getPoints(8);
+    if (pts.length < 3) continue;
+    paths.push(
+      pts.map((p) => ({
+        X: Math.round(p.x * scale),
+        Y: Math.round(p.y * scale),
+      })),
+    );
+  }
+  if (!paths.length) return [];
+  const clipper = new ClipperLib.Clipper();
+  clipper.StrictlySimple = true;
+  clipper.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
+  const tree = new ClipperLib.PolyTree();
+  clipper.Execute(
+    ClipperLib.ClipType.ctUnion,
+    tree,
+    ClipperLib.PolyFillType.pftNonZero,
+    ClipperLib.PolyFillType.pftNonZero,
+  );
+  return polyTreeToShapes(tree, scale);
+}
+
 // Cap and wall faces use identical double-precision contour vertices.
 function extrudeShapes(
   shapes: THREE.Shape[],
@@ -207,30 +281,7 @@ function extrudeShapes(
         ClipperLib.EndType.etClosedPolygon,
       );
       offsetter.Execute(tree, 1000);
-      const fixed: THREE.Shape[] = [];
-      const walk = (node: ClipperLib.PolyNode) => {
-        if (!node.IsHole() && node.Contour().length) {
-          const points = ClipperLib.Clipper.CleanPolygon(
-            node.Contour(),
-            100,
-          ).map((p) => new THREE.Vector2(p.X / scale, p.Y / scale));
-          const shape = new THREE.Shape(points);
-          shape.holes = node
-            .Childs()
-            .filter((c) => c.IsHole())
-            .map(
-              (c) =>
-                new THREE.Path(
-                  ClipperLib.Clipper.CleanPolygon(c.Contour(), 100).map(
-                    (p) => new THREE.Vector2(p.X / scale, p.Y / scale),
-                  ),
-                ),
-            );
-          fixed.push(shape);
-        }
-        for (const child of node.Childs()) walk(child);
-      };
-      walk(tree);
+      const fixed = polyTreeToShapes(tree, scale);
       if (!fixed.length) throw Error("Cannot repair touching glyph contours");
       append(result, extrudeShapes(fixed, depth, name, color, repairDepth + 1));
       continue;
@@ -334,6 +385,12 @@ function append(target: Part, p: Part) {
     ...p.triangles.map((t) => t.map((i) => i + offset) as Vec3),
   );
 }
+type TextOptions = {
+  referenceBox?: number;
+  maxWidth?: number;
+  maxBandHeight?: number;
+  onClamped?: (clamped: boolean) => void;
+};
 function makeText(
   text: string,
   font: Pick<Font, "charToGlyph" | "unitsPerEm">,
@@ -343,6 +400,7 @@ function makeText(
   cy: number,
   base: Base,
   design: Design,
+  options?: TextOptions,
 ): Part | null {
   if (!text.trim()) return null;
   const merged: Part = { name, color, vertices: [], triangles: [] };
@@ -381,7 +439,7 @@ function makeText(
           shapePath.currentPath?.closePath();
       }
     }
-    const shapes = shapePath.toShapes(true);
+    const shapes = subPathsToShapes(shapePath);
     if (shapes.length) {
       outlines.push(
         shapes.flatMap((shape) => {
@@ -400,14 +458,25 @@ function makeText(
     maxX = Math.max(...xs),
     minY = Math.min(...ys),
     maxY = Math.max(...ys);
-  const scale = Math.min(
-    height / (maxY - minY),
+  const rawW = maxX - minX,
+    rawH = maxY - minY;
+  if (rawW <= 0 || rawH <= 0) return null;
+  const allowedWidth =
+    options?.maxWidth ??
     (name === "Status_Text"
       ? (base.layout.statusTextWidth ?? base.layout.textWidth)
-      : base.layout.textWidth) /
-      (maxX - minX),
-  );
-  const actual = (maxY - minY) * scale;
+      : base.layout.textWidth);
+  const desiredScale =
+    height /
+    (options?.referenceBox ? Math.max(options.referenceBox, rawH) : rawH);
+  const widthScale = allowedWidth / rawW;
+  const bandScale =
+    options?.maxBandHeight && options.maxBandHeight > 0
+      ? options.maxBandHeight / rawH
+      : Infinity;
+  const scale = Math.min(desiredScale, widthScale, bandScale);
+  options?.onClamped?.(scale < desiredScale - 1e-9);
+  const actual = rawH * scale;
   design.textHeights[name] = actual;
   const strokes = outlines
     .map((p) => sampledStroke(p, scale))
@@ -464,42 +533,87 @@ export function buildDesign(
   // Actual visible bounds follow the optional hook; the body size stays unchanged.
   d.size=[0,1,2].map(axis=>{const values=d.parts.flatMap(p=>p.vertices.map(v=>v[axis]));return Math.max(...values)-Math.min(...values)});
   const hasPronouns = !!c.pronouns.trim();
+  const hasStatus = !!text.trim();
   const rules = base.layout.textRules;
-  const specs: [string, string, string, number, number][] = [
+  const nameScale = nameFontScaleRatio(c.nameFontScale);
+  const baseNameHeight = hasPronouns
+    ? rules.name.heightWithPronouns
+    : rules.name.height;
+  const nameCenterY = hasPronouns
+    ? hasStatus
+      ? rules.name.centerYWithPronouns
+      : (rules.name.centerYWithPronounsWithoutStatus ?? 5.5)
+    : hasStatus
+      ? rules.name.centerY
+      : (rules.name.centerYWithoutStatus ?? 0);
+  const pronounsCenterY = hasStatus
+    ? rules.pronouns.centerY
+    : (rules.pronouns.centerYWithoutStatus ?? -5.5);
+  const statusCenterY = hasPronouns
+    ? rules.status.centerY
+    : (rules.status.centerYWithoutPronouns ?? rules.status.centerY);
+  const nameMaxWidth = Math.max(10, base.layout.textWidth - NAME_RIGHT_MARGIN);
+  const g = style.geometry as {
+    family?: string;
+    panelHalfHeight?: number;
+    rimWidth?: number;
+    rightCenter: number;
+    rightRadius: number;
+  };
+  const innerHalf =
+    g.family === "reference-round-panel" &&
+    g.panelHalfHeight !== undefined &&
+    g.rimWidth !== undefined
+      ? g.panelHalfHeight - g.rimWidth
+      : g.rightRadius;
+  const dx = Math.max(0, base.layout.textLeft + nameMaxWidth - g.rightCenter);
+  const plateTopY = Math.sqrt(Math.max(0, innerHalf * innerHalf - dx * dx));
+  const avatar = base.layout.avatar;
+  const dotTop =
+    avatar && avatar.dotCenter[0] + avatar.dotRadius > base.layout.textLeft
+      ? avatar.dotCenter[1] + avatar.dotRadius + 0.1
+      : -Infinity;
+  let floorY = Math.max(-plateTopY + 0.4, dotTop);
+  if (hasPronouns) {
+    floorY = Math.max(floorY, pronounsCenterY + rules.pronouns.height / 2 + 0.4);
+  } else if (hasStatus) {
+    floorY = Math.max(floorY, statusCenterY + rules.status.height / 2 + 0.5);
+  }
+  const maxNameBandHeight =
+    2 * Math.max(0, Math.min(plateTopY - 0.4 - nameCenterY, nameCenterY - floorY));
+  const specs: [string, string, string, number, number, TextOptions?][] = [
     [
       "Name",
       c.displayName,
       c.friend ? palette.Friend_Name : palette.Name,
-      hasPronouns ? rules.name.heightWithPronouns : rules.name.height,
-      hasPronouns
-        ? text.trim()
-          ? rules.name.centerYWithPronouns
-          : (rules.name.centerYWithPronounsWithoutStatus ?? 5.5)
-        : text.trim()
-          ? rules.name.centerY
-          : (rules.name.centerYWithoutStatus ?? 0),
+      baseNameHeight * nameScale,
+      nameCenterY,
+      {
+        referenceBox: REFERENCE_NAME_BOX,
+        maxWidth: nameMaxWidth,
+        maxBandHeight: maxNameBandHeight,
+        onClamped: (clamped) => {
+          d.nameFontClamped = clamped;
+        },
+      },
     ],
     [
       "Pronouns",
       c.pronouns,
       palette.Pronouns,
       rules.pronouns.height,
-      text.trim()
-        ? rules.pronouns.centerY
-        : (rules.pronouns.centerYWithoutStatus ?? -5.5),
+      pronounsCenterY,
     ],
     [
       "Status_Text",
       text,
       palette.Status_Text,
       rules.status.height,
-      hasPronouns
-        ? rules.status.centerY
-        : (rules.status.centerYWithoutPronouns ?? rules.status.centerY),
+      statusCenterY,
     ],
   ];
-  for (const [name, text, color, h, y] of specs) {
-    const part = makeText(text, font, name, color, h, y, base, d);
+  for (const [name, text, color, h, y, options] of specs) {
+    const part = makeText(text, font, name, color, h, y, base, d, options);
     if (part) d.parts.push(part);
   }
   // Restored custom filament settings must be visible in both preview and GLB.

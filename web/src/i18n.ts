@@ -46,6 +46,25 @@ export const statusLabels: Record<Language, Record<string, string>> = {
 // Busy is the legacy API identifier for red Do Not Disturb; orange Ask Me is Chinese 忙碌.
 // Japanese wording is retained pending a current primary-source/client verification.
 const rows: Record<string, [string, string, string]> = {
+  "名称字号": ["名前の文字サイズ", "이름 글자 크기", "Name font size"],
+  "名称字号百分比": ["名前の文字サイズ（%）", "이름 글자 크기 (%)", "Name font size (%)"],
+  "当前字高": ["現在の文字高さ", "현재 글자 높이", "Current height"],
+  "恢复默认": ["標準に戻す", "기본값으로 복원", "Reset to default"],
+  "名称较长或受限于版面空间，已自动微调字号以适配区域。": [
+    "名前が長いか表示領域の上限に達したため、領域内に収まるよう文字サイズを自動調整しました。",
+    "이름이 길거나 배치 공간 한도에 닿아 영역에 맞게 글자 크기를 자동 조정했습니다.",
+    "Name font size was automatically fitted to the available nameplate area.",
+  ],
+  "名称字号比例必须是 50–150% 的数字": [
+    "名前の文字サイズ倍率は 50–150% の数値にしてください",
+    "이름 글자 크기 배율은 50–150% 사이의 숫자여야 합니다",
+    "Name font scale must be a number between 50% and 150%",
+  ],
+  "名称字号比例必须在 50–150% 之间": [
+    "名前の文字サイズ倍率は 50–150% の範囲にしてください",
+    "이름 글자 크기 배율은 50–150% 사이여야 합니다",
+    "Name font scale must be between 50% and 150%",
+  ],
   "照片排版方式": ["写真の配置","사진 배치","Photo layout"],
   "单张": ["1枚","한 장","Single photo"],
   "多张（铺满页面）": ["複数（用紙を最大限に使用）","여러 장 (용지 가득 채우기)","Multiple (fill the sheet)"],

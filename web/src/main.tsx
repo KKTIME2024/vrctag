@@ -12,7 +12,13 @@ import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LanguagePicker } from "./LanguagePicker";
 import { StyleThumbnail } from "./StyleThumbnail";
-import { scaledDimensions, referenceDimensions, clampScale, percentFromMillimeters } from "./size-scale";
+import {
+  scaledDimensions,
+  referenceDimensions,
+  clampScale,
+  clampNameFontScale,
+  percentFromMillimeters,
+} from "./size-scale";
 import { SizeNumberInput } from "./SizeNumberInput";
 import { takeStarPromptOpportunity } from "./star-prompt";
 import { Preview } from "./Preview";
@@ -369,6 +375,12 @@ function App() {
     updatePlanarPercent(percentFromMillimeters(millimeters, referenceSize[axis]));
   const updateThicknessMillimeters = (millimeters: number) =>
     updateThicknessPercent(percentFromMillimeters(millimeters, referenceSize[2]));
+  const nameFontScale = config.nameFontScale ?? 100;
+  const updateNameFontScale = (raw: number) => {
+    const value = clampNameFontScale(raw);
+    if (Math.abs(value - nameFontScale) > 0.0000001)
+      patch({ nameFontScale: value });
+  };
   return (
     <>
       <header className="topbar">
@@ -445,6 +457,51 @@ function App() {
                 maxLength={120}
                 onChange={(e) => patch({ displayName: e.target.value })}
               />
+              <div className="name-font-control">
+                <div className="name-font-header">
+                  <label htmlFor="name-font-scale-range">{t("名称字号")}</label>
+                  <SizeNumberInput
+                    id="name-font-scale"
+                    label={t("名称字号百分比")}
+                    value={nameFontScale}
+                    min={50}
+                    max={150}
+                    unit="%"
+                    onCommit={updateNameFontScale}
+                  />
+                </div>
+                <input
+                  id="name-font-scale-range"
+                  className="size-range"
+                  type="range"
+                  min={50}
+                  max={150}
+                  step={1}
+                  value={nameFontScale}
+                  onChange={(e) => updateNameFontScale(Number(e.target.value))}
+                />
+                <div className="name-font-meta">
+                  {design?.textHeights.Name !== undefined && (
+                    <span>
+                      {t("当前字高")} <strong>{mm(design.textHeights.Name)} mm</strong>
+                    </span>
+                  )}
+                  {Math.abs(nameFontScale - 100) > 0.0001 && (
+                    <button
+                      type="button"
+                      className="name-font-reset"
+                      onClick={() => updateNameFontScale(100)}
+                    >
+                      {t("恢复默认")}
+                    </button>
+                  )}
+                </div>
+                {design?.nameFontClamped && (
+                  <p className="field-note">
+                    {t("名称较长或受限于版面空间，已自动微调字号以适配区域。")}
+                  </p>
+                )}
+              </div>
               <div className="friend-row">
                 <div>
                   <label htmlFor="friend">{t("好友外观")}</label>

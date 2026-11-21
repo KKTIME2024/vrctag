@@ -4,6 +4,8 @@ import type { Config, Design, Part, Vec3 } from "./model";
 
 export const MIN_SIZE_PERCENT = 50;
 export const MAX_SIZE_PERCENT = 150;
+export const MIN_NAME_FONT_SCALE = 50;
+export const MAX_NAME_FONT_SCALE = 150;
 
 /** Old configs with missing fields are treated as 100%. */
 export function scaleRatio(percent: number | undefined): number {
@@ -13,10 +15,25 @@ export function scaleRatio(percent: number | undefined): number {
   return value / 100;
 }
 
+/** Custom name font scale relative to the style's default title size; defaults to 100%. */
+export function nameFontScaleRatio(percent: number | undefined): number {
+  const value = percent ?? 100;
+  if (!Number.isFinite(value) || value < MIN_NAME_FONT_SCALE || value > MAX_NAME_FONT_SCALE)
+    throw Error("名称字号比例必须是 50–150% 的数字");
+  return value / 100;
+}
+
 /** Keep saved ratios stable, including decimals needed for 0.01 mm input. */
 export function clampScale(percent: number): number {
   if (!Number.isFinite(percent)) throw Error("比例必须是有效数字");
   const bounded = Math.max(MIN_SIZE_PERCENT, Math.min(MAX_SIZE_PERCENT, percent));
+  return Math.round(bounded * 1_000_000) / 1_000_000;
+}
+
+/** Clamp a custom name font scale percentage into 50–150% with stable precision. */
+export function clampNameFontScale(percent: number): number {
+  if (!Number.isFinite(percent)) throw Error("比例必须是有效数字");
+  const bounded = Math.max(MIN_NAME_FONT_SCALE, Math.min(MAX_NAME_FONT_SCALE, percent));
   return Math.round(bounded * 1_000_000) / 1_000_000;
 }
 
