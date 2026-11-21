@@ -22,7 +22,8 @@ import {
 import { SizeNumberInput } from "./SizeNumberInput";
 import { takeStarPromptOpportunity } from "./star-prompt";
 import { Preview } from "./Preview";
-import { PHOTO_PAPERS, generatePhotoPdf, planPhotoPdf, type PhotoPaperId, type PhotoPrintMode } from "./photo-pdf";
+import { PHOTO_PAPERS, generatePhotoBatchPdf, planPhotoPages, type PhotoPaperId, type PhotoPrintMode } from "./photo-pdf";
+import { PhotoCropEditor, PhotoSheetPreview, readPhoto, type PhotoItem } from "./PhotoBatch";
 import {
   defaults,
   statuses,
@@ -51,7 +52,10 @@ function App() {
   }));
   const [design, setDesign] = useState<Design | null>(null);
   const [avatar, setAvatar] = useState("");
-  const printAvatarFile = useRef<File | null>(null);
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [editorStart, setEditorStart] = useState<number | null>(null);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [draggingPhoto, setDraggingPhoto] = useState(false);
   const [avatarSourceSize, setAvatarSourceSize] = useState(0);
   const [photoPaperId, setPhotoPaperId] = useState<PhotoPaperId>("4r");
   const [photoPrintMode, setPhotoPrintMode] = useState<PhotoPrintMode>("multiple");
@@ -217,60 +221,32 @@ function App() {
     setExporting(true);
     worker.current?.postMessage({ id, type: "export", config: snapshot, exportTarget: exportFormat });
   };
-  async function loadAvatar(file?: File) {
-    if (!file) return;
+  async function loadPhotos(files: File[]) {
+    if (!files.length) return;
     const generation = ++avatarGeneration.current;
     setAvatarError("");
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setAvatarError("请选择 PNG、JPEG 或 WebP 图片。");
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      setAvatarError("图片过大，请选择 15 MB 以内的图片。");
-      return;
-    }
-    let bitmap: ImageBitmap | undefined;
     try {
-      bitmap = await createImageBitmap(file);
-      if (generation !== avatarGeneration.current) {
-        bitmap.close();
-        return;
-      }
-      if (bitmap.width * bitmap.height > 40000000) {
-        bitmap.close();
-        setAvatarError("图片像素过大，请缩小至 4000 万像素以内。");
-        return;
-      }
-      const size = Math.min(bitmap.width, bitmap.height);
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = 512;
-      canvas
-        .getContext("2d")!
-        .drawImage(
-          bitmap,
-          (bitmap.width - size) / 2,
-          (bitmap.height - size) / 2,
-          size,
-          size,
-          0,
-          0,
-          512,
-          512,
-        );
-      bitmap.close();
-      setAvatar(canvas.toDataURL("image/png"));
-      printAvatarFile.current = file;
-      setAvatarSourceSize(size);
-      setPhotoPdfError("");
-      setAvatarName(file.name);
-      setAvatarError("");
-    } catch {
-      if (generation === avatarGeneration.current)
-        setAvatarError("无法读取这张图片，请使用其他图片。");
-    } finally {
-      bitmap?.close();
+      const loaded = await Promise.all(files.map(readPhoto));
+      if (generation !== avatarGeneration.current) return;
+      const start = photos.length;
+      setPhotos(previous => [...previous, ...loaded]);
+      if (!photos.length) { setAvatar(loaded[0].cropped); setAvatarSourceSize(loaded[0].sourceSize); setAvatarName(loaded[0].name); }
+      setPhotoPdfError(""); setPreviewPage(0); setEditorStart(start);
+    } catch (error) {
+      if (generation === avatarGeneration.current) setAvatarError(error instanceof Error ? error.message : "无法读取这张图片，请使用其他图片。");
     }
   }
+  useEffect(() => {
+    const paste = (event: ClipboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      const files = Array.from(event.clipboardData?.items ?? []).filter(item => item.kind === "file" && item.type.startsWith("image/")).map(item => item.getAsFile()).filter((f): f is File => !!f);
+      if (files.length) { event.preventDefault(); void loadPhotos(files); }
+    };
+    const preventFileNavigation = (event: DragEvent) => { if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault(); };
+    window.addEventListener("paste", paste); window.addEventListener("dragover", preventFileNavigation); window.addEventListener("drop", preventFileNavigation);
+    return () => { window.removeEventListener("paste", paste); window.removeEventListener("dragover", preventFileNavigation); window.removeEventListener("drop", preventFileNavigation); };
+  }, [photos]);
   async function restoreConfig(file?: File) {
     if (!file) return;
     const generation = ++configImportGeneration.current;
@@ -312,7 +288,7 @@ function App() {
     setConfig({ ...defaults, language, statusMode: "preset" });
     setPronounMode("None");
     setAvatar("");
-    printAvatarFile.current = null;
+    setPhotos([]); setEditorStart(null); setPreviewPage(0);
     setAvatarSourceSize(0);
     setPhotoPdfError("");
     setAvatarName("未上传头像");
@@ -345,16 +321,17 @@ function App() {
     dotOffsetYmm: style.layout.avatar.dotCenter[1] - style.layout.avatar.center[1],
     dotRadiusMm: style.layout.avatar.dotRadius,
   };
-  const photoPlan = planPhotoPdf(photoPaperId, avatarPhotoLayout, config.planarScale ?? 100, photoPrintMode);
-  const photoPpi = avatarSourceSize ? Math.round(Math.min(1200, avatarSourceSize) * 25.4 / avatarDiameter) : 0;
+  const photoPages = planPhotoPages(photoPaperId, avatarPhotoLayout, config.planarScale ?? 100, photoPrintMode, photos.length || 1);
+  const activePage = Math.min(previewPage, photoPages.length - 1);
+  const croppedPixels = photos.length ? Math.min(1200, Math.round(avatarSourceSize / photos[0].crop.zoom)) : 0;
+  const photoPpi = croppedPixels ? Math.round(croppedPixels * 25.4 / avatarDiameter) : 0;
   const downloadPhotoPdf = async () => {
-    const file = printAvatarFile.current;
-    if (!file || photoPdfBusy) return;
+    if (!photos.length || photoPdfBusy) return;
     setPhotoPdfBusy(true);
     setPhotoPdfError("");
     try {
-      const pdf = await generatePhotoPdf(file, photoPaperId, style.name, config.planarScale ?? 100, avatarPhotoLayout, photoPrintMode);
-      download(pdf, `vrc-tag-photo-${style.id}-${photoPaperId}-${photoPrintMode}-${photoPlan.positions.length}pcs-${mm(avatarDiameter)}mm.pdf`, "application/pdf");
+      const pdf = await generatePhotoBatchPdf(photos.map(p => p.cropped), photoPaperId, style.name, config.planarScale ?? 100, avatarPhotoLayout, photoPrintMode);
+      download(pdf, `vrc-tag-photo-${style.id}-${photoPaperId}-${photoPrintMode}-${photos.length}photos-${photoPages.length}pages-${mm(avatarDiameter)}mm.pdf`, "application/pdf");
       promptStarAfterExport();
     } catch (error) {
       console.error("Photo PDF export failed", error);
@@ -596,6 +573,11 @@ function App() {
               <div className="section-heading">
                 <span>{t("头像")}</span>
               </div>
+              <div className={`photo-dropzone${draggingPhoto ? " dragging" : ""}`}
+                onDragEnter={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); setDraggingPhoto(true); } }}
+                onDragOver={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDraggingPhoto(false); }}
+                onDrop={e => { e.preventDefault(); setDraggingPhoto(false); void loadPhotos(Array.from(e.dataTransfer.files)); }}>
               <div className="upload-row">
                 <button type="button" className="avatar-thumb" aria-label={t("选择本地图片")} onClick={() => upload.current?.click()}>
                   {avatar ? (
@@ -621,7 +603,7 @@ function App() {
                       avatarGeneration.current++;
                       setAvatarError("");
                       setAvatar("");
-                      printAvatarFile.current = null;
+                      setPhotos([]); setEditorStart(null); setPreviewPage(0);
                       setAvatarSourceSize(0);
                       setPhotoPdfError("");
                       setAvatarName("未上传头像");
@@ -632,15 +614,20 @@ function App() {
                   </button>
                 )}
               </div>
+              <p className="field-note">{t("拖入多张图片，或点击选择；也可以粘贴图片。")}</p>
+              </div>
+              {photos.length > 0 && <div className="photo-batch-list"><p>{t("已上传")} {photos.length} {t("张")} · {t("名牌预览使用第一张")}</p><div>{photos.map((photo, i) => <button type="button" key={i} title={photo.name} onClick={() => setEditorStart(i)}><img src={photo.cropped} alt={`${t("编辑头像")} ${i+1}`} /><span>{i+1}</span></button>)}</div><button type="button" className="secondary" onClick={() => setEditorStart(0)}>{t("重新逐张编辑")}</button></div>}
+              {editorStart !== null && photos[editorStart] && <PhotoCropEditor photos={photos} initialIndex={editorStart} t={t} onClose={() => setEditorStart(null)} onSave={(index, cropped, crop) => { setPhotos(previous => previous.map((item, i) => i === index ? {...item, cropped, crop} : item)); if (index === 0) setAvatar(cropped); }} />}
               <input
                 ref={upload}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
+                multiple
                 hidden
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
+                  const files = Array.from(e.target.files ?? []);
                   e.target.value = "";
-                  void loadAvatar(file);
+                  void loadPhotos(files);
                 }}
               />
               {avatarError && (
@@ -671,21 +658,24 @@ function App() {
                     <label className={photoPrintMode === "single" ? "selected" : ""}>
                       <input type="radio" name="photo-print-mode" value="single" checked={photoPrintMode === "single"}
                         onChange={() => setPhotoPrintMode("single")} />
-                      <span>{t("单张")}</span>
+                      <svg viewBox="0 0 30 38" aria-hidden="true"><rect x="2" y="2" width="26" height="34" rx="2"/><circle cx="15" cy="19" r="6"/></svg><span>{t("一张纸 · 居中一个")}</span>
                     </label>
                     <label className={photoPrintMode === "multiple" ? "selected" : ""}>
                       <input type="radio" name="photo-print-mode" value="multiple" checked={photoPrintMode === "multiple"}
                         onChange={() => setPhotoPrintMode("multiple")} />
-                      <span>{t("多张（铺满页面）")}</span>
+                      <svg viewBox="0 0 30 38" aria-hidden="true"><rect x="2" y="2" width="26" height="34" rx="2"/><circle cx="10" cy="13" r="4"/><circle cx="20" cy="13" r="4"/><circle cx="10" cy="24" r="4"/><circle cx="20" cy="24" r="4"/></svg><span>{t("一张纸 · 居中多个")}</span>
                     </label>
                   </div>
                 </div>
                 <p className="photo-pdf-size">
                   {t("PDF 页面实际尺寸")} <strong>{paper.widthMm} × {paper.heightMm} mm</strong>
                   <span>{t("头像裁剪直径")} <strong>{mm(avatarDiameter)} mm</strong></span>
-                  <span>{t("本页照片数量")} <strong>{photoPlan.positions.length} {t("张")}</strong>{photoPrintMode === "multiple" ? ` · ${photoPlan.columns} × ${photoPlan.rows}` : ""}</span>
+                  <span>{t("本页照片数量")} <strong>{photoPages[activePage].positions.length} {t("张")}</strong> · {t("共")} {photoPages.length} {t("页")}</span>
                 </p>
-                {avatar && <p className="field-note">{t("上传图像的裁剪边长")} {avatarSourceSize} px · {t("估算有效分辨率")} {photoPpi} ppi</p>}
+                <div className="photo-preview-header"><strong>{t("打印排版预览")}</strong><span>{activePage + 1} / {photoPages.length}</span></div>
+                <PhotoSheetPreview paper={paper} plan={photoPages[activePage]} images={photos} layout={avatarPhotoLayout} scale={config.planarScale ?? 100} mode={photoPrintMode} styleName={style.name} t={t} />
+                {photoPages.length > 1 && <div className="photo-preview-nav"><button type="button" disabled={activePage === 0} onClick={() => setPreviewPage(activePage - 1)}>{t("上一页")}</button><button type="button" disabled={activePage === photoPages.length - 1} onClick={() => setPreviewPage(activePage + 1)}>{t("下一页")}</button></div>}
+                {avatar && <p className="field-note">{t("首张图像的裁剪边长")} {croppedPixels} px · {t("估算有效分辨率")} {photoPpi} ppi</p>}
                 <button className="photo-pdf-button" type="button" disabled={!avatar || photoPdfBusy}
                   onClick={() => void downloadPhotoPdf()}>
                   {t(photoPdfBusy ? "正在制作照片 PDF…" : "下载照片打印 PDF")} ↓
@@ -697,8 +687,8 @@ function App() {
                 <p className="field-note">{t("PDF 已按毫米排版：打印选实际尺寸 100%，关闭适应纸张和无边距自动扩展。")}</p>
                 <p className="field-note">{t(photoPrintMode === "single"
                   ? "单张 PDF 包含 20 mm 校准线，可先试印量尺。"
-                  : "多张模式自动紧凑铺满页面，每张实际尺寸不变；最外侧照片可能离纸边仅约 1.5 mm，请确认打印机可印范围。")}</p>
-                {photoPrintMode === "multiple" && <p className="field-note">{t(photoPlan.calibrationYmm === null
+                  : "单张头像会重复排满；多张头像各打印一次并自动分页。最外侧照片可能离纸边仅约 1.5 mm，请确认打印机可印范围。")}</p>
+                {photoPrintMode === "multiple" && <p className="field-note">{t(photoPages[activePage].calibrationYmm === null
                   ? "密排空间不足，已省略校准线；建议先切换单张试印测量，再下载多张。"
                   : "本页空白处保留 20 mm 校准线，打印后请测量。")}</p>}
                 <p className="field-note">{t("Native 的 PDF 会自动避开状态点，并为每张照片附加裁剪虚线。")}</p>
@@ -708,7 +698,7 @@ function App() {
                 <p>{t(style.id === "classic"
                   ? "按显示直径裁圆后粘贴；头像面与白框齐平，没有插纸卡槽。"
                   : "显示的是完整圆的直径；右下角需剪出状态点缺口，再粘贴到头像面。")}</p>
-                <p>{t("直接下载照片 PDF，图片会按显示毫米数居中裁剪。打印 100%/实际尺寸，关闭适应纸张；如在切片器再次缩放模型，纸片也须同比缩放。")}</p>
+                <p>{t("照片 PDF 使用已调整的裁切结果。打印 100%/实际尺寸，关闭适应纸张；如在切片器再次缩放模型，纸片也须同比缩放。")}</p>
                 <p>{t("尺寸为模型名义值，纸厚、胶厚和裁剪余量仍需实物试贴确认。")}</p>
               </details>
             </section>

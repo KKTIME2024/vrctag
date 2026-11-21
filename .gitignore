@@ -34,3 +34,6 @@ studio/generated/
 
 # Local manual export acceptance files.
 /test-exports/
+
+# Local promo video workspace & BGM candidates (never upload to remote git).
+/video-promo/
