@@ -35,6 +35,7 @@ export interface PhotoPdfData {
   imageJpeg: Uint8Array;
   imageWidth: number;
   imageHeight: number;
+  images?: Array<{ imageJpeg: Uint8Array; imageWidth: number; imageHeight: number }>;
 }
 
 export const toPdfPoints = (millimeters: number): number => millimeters * 72 / 25.4;
@@ -71,7 +72,7 @@ export function planPhotoPdf(
   if (mode === "single") {
     if (d + 12 > paper.widthMm || d + 35 > paper.heightMm)
       throw Error("Photo exceeds paper with safe print margins");
-    const centerY = paper.heightMm / 2 + 7;
+    const centerY = paper.heightMm / 2;
     return {
       columns: 1, rows: 1, diameterMm: d,
       positions: [{ xMm: paper.widthMm / 2, yMm: centerY }],
@@ -89,7 +90,7 @@ export function planPhotoPdf(
   const startY = (paper.heightMm - gridH + d) / 2;
   const positions = Array.from({ length: columns * rows }, (_, index) => ({
     xMm: startX + (index % columns) * (d + gap),
-    yMm: startY + Math.floor(index / columns) * (d + gap),
+    yMm: startY + (rows - 1 - Math.floor(index / columns)) * (d + gap),
   }));
   const freeBelowMm = (paper.heightMm - gridH) / 2;
   // No calibration line is drawn on an already full sheet where it could
@@ -100,9 +101,35 @@ export function planPhotoPdf(
   };
 }
 
+/** One upload repeats in packed mode; multiple uploads print once each, across pages. */
+export function planPhotoPages(paperId: PhotoPaperId, layout: AvatarPhotoLayout, scale: number, mode: PhotoPrintMode, imageCount: number) {
+  const base = planPhotoPdf(paperId, layout, scale, mode);
+  if (!Number.isInteger(imageCount) || imageCount < 1) return [];
+  if (imageCount === 1) return [{ ...base, imageIndices: base.positions.map(() => 0) }];
+  const paper = PHOTO_PAPERS.find(p => p.id === paperId)!;
+  const capacity = base.positions.length;
+  const pages = [];
+  for (let offset = 0; offset < imageCount; offset += capacity) {
+    const count = Math.min(capacity, imageCount - offset);
+    if (mode === "single" || count === capacity) {
+      pages.push({ ...base, imageIndices: Array.from({length: count}, (_, i) => offset + i) });
+      continue;
+    }
+    const columns = Math.min(base.columns, count), rows = Math.ceil(count / columns);
+    const step = base.diameterMm + 0.5;
+    const positions = Array.from({length: count}, (_, i) => {
+      const row = Math.floor(i / columns), inRow = Math.min(columns, count - row * columns);
+      return { xMm: paper.widthMm / 2 + (i % columns - (inRow - 1) / 2) * step,
+        yMm: paper.heightMm / 2 + ((rows - 1) / 2 - row) * step };
+    });
+    pages.push({ ...base, columns, rows, positions, imageIndices: positions.map((_, i) => offset + i), calibrationYmm: null });
+  }
+  return pages;
+}
+
 const fmt = (n: number): string => Number(n.toFixed(6)).toString();
 
-function photoOutline(layout: AvatarPhotoLayout, ratio: number): [number, number][] {
+export function photoOutline(layout: AvatarPhotoLayout, ratio: number): [number, number][] {
   const R = layout.radiusMm * ratio;
   const dx = layout.dotOffsetXmm * ratio;
   const dy = layout.dotOffsetYmm * ratio;
@@ -161,23 +188,29 @@ export function buildPhotoPdf(data: PhotoPdfData): Uint8Array {
     throw Error("Expected a JPEG image");
 
   const mode = data.mode ?? "single";
-  const plan = planPhotoPdf(data.paperId, data.layout, data.planarPercent, mode);
+  const images = data.images?.length ? data.images : [{imageJpeg: data.imageJpeg, imageWidth: data.imageWidth, imageHeight: data.imageHeight}];
+  for (const image of images) {
+    if (!Number.isInteger(image.imageWidth) || image.imageWidth <= 0 || image.imageWidth !== image.imageHeight || image.imageJpeg[0] !== 0xff || image.imageJpeg[1] !== 0xd8) throw Error("Invalid JPEG image");
+  }
+  const plans = planPhotoPages(data.paperId, data.layout, data.planarPercent, mode, images.length);
+  const plan = plans[0];
   const width = toPdfPoints(paper.widthMm), height = toPdfPoints(paper.heightMm);
   const ratio = data.planarPercent / 100;
   const diameter = plan.diameterMm;
   const circlePt = toPdfPoints(diameter);
   const radiusPt = circlePt / 2;
   const outline = photoOutline(data.layout, ratio);
+  const contents = plans.map((plan) => {
   const contentParts: string[] = [
     "q", "1 1 1 rg", `${fmt(0)} ${fmt(0)} ${fmt(width)} ${fmt(height)} re f`, "Q",
   ];
-  for (const position of plan.positions) {
+  for (const [index, position] of plan.positions.entries()) {
     const centerX = toPdfPoints(position.xMm), centerY = toPdfPoints(position.yMm);
     const path = pdfPath(outline, centerX, centerY);
     contentParts.push(
       "q", path, "W n",
       `${fmt(circlePt)} 0 0 ${fmt(circlePt)} ${fmt(centerX - radiusPt)} ${fmt(centerY - radiusPt)} cm`,
-      "/Im1 Do", "Q",
+      `/Im${plan.imageIndices[index] + 1} Do`, "Q",
       "q", "0.25 0.25 0.25 RG", "0.35 w", "[2 2] 0 d", path, "S", "Q",
     );
   }
@@ -205,7 +238,8 @@ export function buildPhotoPdf(data: PhotoPdfData): Uint8Array {
       "(Actual size 100% | No Fit to Page | No borderless enlargement) Tj", "ET", "Q",
     );
   }
-  const content = contentParts.join("\n") + "\n";
+  return contentParts.join("\n") + "\n";
+  });
 
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -224,16 +258,22 @@ export function buildPhotoPdf(data: PhotoPdfData): Uint8Array {
     append("\nendobj\n");
   };
   append("%PDF-1.4\n%VRCPhoto\n");
+  const imageStart = 4, fontId = imageStart + images.length, pageStart = fontId + 1;
   object(1, "<< /Type /Catalog /Pages 2 0 R >>");
-  object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-  object(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(width)} ${fmt(height)}] /Resources << /XObject << /Im1 5 0 R >> /Font << /F1 6 0 R >> >> /Contents 4 0 R >>`);
-  object(4, content, "");
-  object(5, data.imageJpeg, `/Type /XObject /Subtype /Image /Width ${data.imageWidth} /Height ${data.imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`);
-  object(6, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  const xref = pos;
-  append("xref\n0 7\n0000000000 65535 f \n");
-  for (let i = 1; i <= 6; i++) append(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
-  append(`trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  object(2, `<< /Type /Pages /Kids [${plans.map((_, i) => `${pageStart + 2*i} 0 R`).join(" ")}] /Count ${plans.length} >>`);
+  object(3, "<< >>");
+  images.forEach((image, i) => object(imageStart + i, image.imageJpeg, `/Type /XObject /Subtype /Image /Width ${image.imageWidth} /Height ${image.imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`));
+  object(fontId, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  plans.forEach((_, i) => {
+    const pageId = pageStart + i*2;
+    const xobjects = images.map((_, j) => `/Im${j+1} ${imageStart+j} 0 R`).join(" ");
+    object(pageId, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(width)} ${fmt(height)}] /Resources << /XObject << ${xobjects} >> /Font << /F1 ${fontId} 0 R >> >> /Contents ${pageId+1} 0 R >>`);
+    object(pageId+1, contents[i], "");
+  });
+  const xref = pos, count = pageStart + plans.length * 2;
+  append(`xref\n0 ${count}\n0000000000 65535 f \n`);
+  for (let i = 1; i < count; i++) append(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
+  append(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   const result = new Uint8Array(pos);
   let cursor = 0;
   for (const chunk of chunks) { result.set(chunk, cursor); cursor += chunk.byteLength; }
@@ -271,4 +311,22 @@ export async function generatePhotoPdf(
   } finally {
     bitmap.close();
   }
+}
+
+export async function generatePhotoBatchPdf(sources: string[], paperId: PhotoPaperId, styleName: string, planarPercent: number, layout: AvatarPhotoLayout, mode: PhotoPrintMode): Promise<Blob> {
+  const images = [];
+  for (const source of sources) {
+    const bitmap = await createImageBitmap(await (await fetch(source)).blob());
+    try {
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = Math.min(1200, bitmap.width, bitmap.height);
+      const ctx = canvas.getContext("2d"); if (!ctx) throw Error("Photo canvas is unavailable");
+      ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(v => v ? resolve(v) : reject(Error("JPEG encoding failed")), "image/jpeg", .96));
+      images.push({imageJpeg: new Uint8Array(await blob.arrayBuffer()), imageWidth: canvas.width, imageHeight: canvas.height});
+    } finally { bitmap.close(); }
+  }
+  if (!images.length) throw Error("No images");
+  const pdf = buildPhotoPdf({paperId, styleName, planarPercent, layout, mode, ...images[0], images});
+  return new Blob([pdf.buffer as ArrayBuffer], {type: "application/pdf"});
 }
